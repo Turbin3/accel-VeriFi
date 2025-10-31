@@ -1,6 +1,7 @@
 #![allow(unexpected_cfgs)]
 #![allow(deprecated)]
 use anchor_lang::prelude::*;
+use ephemeral_rollups_sdk::{anchor::{commit,delegate,ephemeral}, cpi::DelegateConfig};
 
 declare_id!("CwD9tU4A7c7SS5b55ZtTcEPGA8svJQUhfdCbdoaSF1Tx");
 
@@ -8,11 +9,11 @@ pub const CALLBACK_VRF_DISCRIMINATOR: [u8; 7] = *b"clbrand";
 mod state;
 mod instructions;
 
-pub use crate::state::*;
-pub use crate::instructions::*;
-
+use crate::instructions::*;
+use crate::state::*;
 
 #[program]
+#[ephemeral]
 pub mod invoice_claim {
     use super::*;
 
@@ -109,5 +110,51 @@ pub mod invoice_claim {
         instructions::vendor::update_vendor_wallet(ctx, new_wallet)
     }
 
+    pub fn delegate_invoice_extraction(ctx: Context<DelegateExtraction>) -> Result<()> {
+        // no need to pass seeds again because the macro knows them
+        ctx.accounts.delegate_invoice_request(
+            &ctx.accounts.authority,
+            &[],
+            DelegateConfig {
+                validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    }
 
+    pub fn commit_invoice_extraction(
+        ctx: Context<CommitInvoice>,
+        extracted_amount: u64,
+        extracted_vendor: Pubkey,
+    ) -> Result<()> {
+        let invoice = &mut ctx.accounts.invoice_request;
+        invoice.amount = extracted_amount;
+        invoice.authority = extracted_vendor;
+        invoice.status = RequestStatus::Completed;
+
+        Ok(())
+    }
+}
+
+#[delegate]
+#[derive(Accounts)]
+pub struct DelegateExtraction<'info> {
+    // NOTE: use the same seeds used when creating invoice_request
+    #[account(mut, del, seeds = [b"request", authority.key().as_ref()], bump)]
+    pub invoice_request: Account<'info, InvoiceRequest>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>, // must be the same authority used when creating the request
+
+    pub system_program: Program<'info, System>,
+}
+
+#[commit]
+#[derive(Accounts)]
+pub struct CommitInvoice<'info> {
+    #[account(mut)]
+    pub invoice_request: Account<'info, InvoiceRequest>,
+
+    pub system_program: Program<'info, System>,
 }
