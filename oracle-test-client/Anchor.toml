@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-invoice_claim = "CwD9tU4A7c7SS5b55ZtTcEPGA8svJQUhfdCbdoaSF1Tx"
+invoice_claim = "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U"
 
 [registry]
 url = "https://api.apr.dev"
@@ -15,7 +15,10 @@ cluster = "Devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
 bootstrap = "npx ts-node -P ./tsconfig.json scripts/bootstrap.ts"
-submit = "npx ts-node -P ./tsconfig.json scripts/submit_request.ts"
 request-vrf = "npx ts-node -P ./tsconfig.json scripts/request_vrf.ts"
+submit = "npx ts-node -P ./tsconfig.json scripts/submit_request.ts"
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+test-invoice = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/invoice-test.ts"
+test-org = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/org-test.ts"
+test-vendor = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/vendor-test.ts"
