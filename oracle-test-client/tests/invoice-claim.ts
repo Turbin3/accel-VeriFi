@@ -146,36 +146,8 @@ describe("invoice-claim", () => {
     }
   });
 
-  it("Process invoice payment (move to escrow)", async () => {
-    const [invoicePda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("invoice"), provider.wallet.publicKey.toBuffer()],
-      program.programId
-    );
-
-    try {
-      const before = await program.account.invoiceAccount.fetch(invoicePda);
-
-      if (!("readyForPayment" in (before as any).status)) {
-        console.log("Invoice not ReadyForPayment yet; current status:", before.status);
-        return;
-      }
-
-      const tx = await program.methods
-        .processInvoicePayment()
-        .accounts({
-          invoiceAccount: invoicePda,
-          authority: provider.wallet.publicKey,
-        })
-        .rpc();
-
-      console.log("Payment processed (status -> InEscrow). Tx:", tx);
-
-      const after = await program.account.invoiceAccount.fetch(invoicePda);
-      console.log("New status:", after.status);
-    } catch (e) {
-      console.log("Payment attempt failed:", (e as any).message);
-    }
-  });
+  // Escrow-before-audit flow uses fund_escrow (SPL) to move tokens into escrow,
+  // then VRF sets audit outcome, and settle_to_vendor releases funds.
 
   it("Approve audit if pending (manual review)", async () => {
     const [invoicePda] = anchor.web3.PublicKey.findProgramAddressSync(

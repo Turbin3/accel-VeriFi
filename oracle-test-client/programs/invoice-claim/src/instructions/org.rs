@@ -87,5 +87,11 @@ pub fn update_org_config(
         msg!("Oracle signer updated to: {}", oracle_signer);
     }
 
+    if let Some(mint) = args.mint {
+        require!(mint != Pubkey::default(), InvoiceError::WrongMint);
+        cfg.mint = mint;
+        msg!("Mint updated to: {}", mint);
+    }
+
     Ok(())
 }

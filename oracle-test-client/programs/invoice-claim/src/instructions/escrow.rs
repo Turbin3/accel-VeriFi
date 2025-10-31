@@ -49,10 +49,8 @@ pub fn fund_escrow(ctx: Context<FundEscrow>) -> Result<()> {
 
     let inv = &mut ctx.accounts.invoice_account;
     let amount = inv.amount;
-    require!(
-        inv.status == InvoiceStatus::ReadyForPayment,
-        InvoiceError::InvalidStatus
-    );
+    // Escrow before audit: allow funding when invoice is validated
+    require!(inv.status == InvoiceStatus::Validated, InvoiceError::InvalidStatus);
     require!(amount <= cfg.per_invoice_cap, InvoiceError::CapExceeded);
 
     // Ensure mint matches configuration
@@ -69,7 +67,7 @@ pub fn fund_escrow(ctx: Context<FundEscrow>) -> Result<()> {
     }),
     amount)?;
 
-    inv.status = InvoiceStatus::InEscrow;
+    inv.status = InvoiceStatus::InEscrowAwaitingVRF;
     Ok(())
 }
 
@@ -115,7 +113,11 @@ pub fn settle_to_vendor(ctx: Context<SettleToVendor>) -> Result<()> {
     require!(!cfg.paused, InvoiceError::OrgPaused);
 
     let inv = &mut ctx.accounts.invoice_account;
-    require!(inv.status == InvoiceStatus::InEscrow, InvoiceError::InvalidStatus);
+    // Settle only when escrowed and cleared to settle
+    require!(inv.status == InvoiceStatus::InEscrowReadyToSettle, InvoiceError::InvalidStatus);
+    // Ensure due date reached
+    let now = Clock::get()?.unix_timestamp;
+    require!(now >= inv.due_date, InvoiceError::PaymentNotDue);
     let amount = inv.amount;
 
     // Sign with escrow authority PDA derived from invoice key

@@ -16,10 +16,8 @@ pub struct ProcessPayment<'info> {
 
 pub fn process_invoice_payment(ctx: Context<ProcessPayment>) -> Result<()> {
     let invoice = &ctx.accounts.invoice_account;
-    require!(
-        invoice.status == InvoiceStatus::ReadyForPayment,
-        InvoiceError::InvalidStatus
-    );
+    // Status-only path: treat as logical escrow authorization before VRF
+    require!(invoice.status == InvoiceStatus::Validated, InvoiceError::InvalidStatus);
 
     let current_time = Clock::get()?.unix_timestamp;
     require!(current_time <= invoice.due_date, InvoiceError::PaymentOverdue);
@@ -30,8 +28,8 @@ pub fn process_invoice_payment(ctx: Context<ProcessPayment>) -> Result<()> {
     msg!("Due Date: {}", invoice.due_date);
 
     let invoice_mut = &mut ctx.accounts.invoice_account;
-    invoice_mut.status = InvoiceStatus::InEscrow;
-    msg!("Invoice moved to escrow");
+    invoice_mut.status = InvoiceStatus::InEscrowAwaitingVRF;
+    msg!("Invoice logically moved to escrow (status-only)");
     Ok(())
 }
 
@@ -50,7 +48,7 @@ pub struct CompletePayment<'info> {
 
 pub fn complete_payment(ctx: Context<CompletePayment>) -> Result<()> {
     let invoice = &mut ctx.accounts.invoice_account;
-    require!(invoice.status == InvoiceStatus::InEscrow, InvoiceError::InvalidStatus);
+    require!(invoice.status == InvoiceStatus::InEscrowReadyToSettle, InvoiceError::InvalidStatus);
     invoice.status = InvoiceStatus::Paid;
     msg!("Payment completed for vendor: {}", invoice.vendor_name);
     Ok(())
