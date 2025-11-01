@@ -155,12 +155,12 @@ pub fn audit_decide(ctx: Context<AuditDecide>, approve: bool) -> Result<()> {
     );
 
     let invoice = &mut ctx.accounts.invoice_account;
-    require!(invoice.status == InvoiceStatus::AuditPending, InvoiceError::InvalidStatus);
+    require!(invoice.status == InvoiceStatus::InEscrowAuditPending, InvoiceError::InvalidStatus);
 
     invoice.status = if approve {
-        InvoiceStatus::ReadyForPayment
+        InvoiceStatus::InEscrowReadyToSettle
     } else {
-        InvoiceStatus::Rejected
+        InvoiceStatus::Refunded
     };
 
     Ok(())

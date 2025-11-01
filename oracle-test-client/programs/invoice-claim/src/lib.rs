@@ -2,15 +2,15 @@
 #![allow(deprecated)]
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::{anchor::{commit,delegate,ephemeral}, cpi::DelegateConfig};
-
-declare_id!("CwD9tU4A7c7SS5b55ZtTcEPGA8svJQUhfdCbdoaSF1Tx");
+declare_id!("92icJAeAhsB1fPyoURiaC53pizWW5Kv7NU5X87WdRLBB");
 
 pub const CALLBACK_VRF_DISCRIMINATOR: [u8; 7] = *b"clbrand"; 
 mod state;
 mod instructions;
 
-use crate::instructions::*;
-use crate::state::*;
+pub use crate::state::*;
+pub use crate::instructions::*;
+
 
 #[program]
 #[ephemeral]
@@ -109,8 +109,7 @@ pub mod invoice_claim {
     pub fn update_vendor_wallet(ctx: Context<ManageVendor>, new_wallet: Pubkey) -> Result<()> {
         instructions::vendor::update_vendor_wallet(ctx, new_wallet)
     }
-
-    pub fn delegate_invoice_extraction(ctx: Context<DelegateExtraction>) -> Result<()> {
+ pub fn delegate_invoice_extraction(ctx: Context<DelegateExtraction>) -> Result<()> {
         // no need to pass seeds again because the macro knows them
         ctx.accounts.delegate_invoice_request(
             &ctx.accounts.authority,
@@ -122,8 +121,7 @@ pub mod invoice_claim {
         )?;
         Ok(())
     }
-
-    pub fn commit_invoice_extraction(
+ pub fn commit_invoice_extraction(
         ctx: Context<CommitInvoice>,
         extracted_amount: u64,
         extracted_vendor: Pubkey,
@@ -135,8 +133,8 @@ pub mod invoice_claim {
 
         Ok(())
     }
-}
 
+}
 #[delegate]
 #[derive(Accounts)]
 pub struct DelegateExtraction<'info> {

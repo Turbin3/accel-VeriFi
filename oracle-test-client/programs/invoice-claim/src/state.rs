@@ -67,12 +67,12 @@ pub enum RequestStatus {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
 pub enum InvoiceStatus {
-    ReadyForPayment,
-    AuditPending,
     Validated,
-    InEscrow,
+    InEscrowAwaitingVRF,
+    InEscrowAuditPending,
+    InEscrowReadyToSettle,
     Paid,
-    Rejected,
+    Refunded,
 }
 
 // Update Org Config Args
@@ -82,6 +82,7 @@ pub struct UpdateOrgConfigArgs {
     pub daily_cap: Option<u64>,
     pub paused: Option<bool>,
     pub oracle_signer: Option<Pubkey>,
+    pub mint: Option<Pubkey>,
 }
 
 #[error_code]

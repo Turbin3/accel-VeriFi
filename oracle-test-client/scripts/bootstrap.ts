@@ -39,12 +39,7 @@ async function main() {
     try {
       const oracleKey = new anchor.web3.PublicKey(oracleKeyStr);
       const tx = await program.methods
-        .updateOrgConfig({
-          oracleSigner: oracleKey,
-          perInvoiceCap: null,
-          dailyCap: null,
-          paused: null,
-        })
+        .updateOrgConfig({ oracleSigner: oracleKey, perInvoiceCap: null, dailyCap: null, paused: null, mint: null })
         .accounts({ authority: wallet.publicKey, orgConfig: orgConfigPda })
         .rpc();
       console.log("oracle_signer set to:", oracleKey.toBase58(), "Tx:", tx);
@@ -83,4 +78,3 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
-
