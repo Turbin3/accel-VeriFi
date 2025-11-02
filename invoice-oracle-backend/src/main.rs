@@ -97,7 +97,7 @@ pub enum RequestStatus {
     Completed,
 }
 
-const PROGRAM_ID: &str = "CwD9tU4A7c7SS5b55ZtTcEPGA8svJQUhfdCbdoaSF1Tx";
+const PROGRAM_ID: &str = "92icJAeAhsB1fPyoURiaC53pizWW5Kv7NU5X87WdRLBB";
 const RPC_URL: &str = "https://api.devnet.solana.com";
 
 #[tokio::main]
@@ -281,7 +281,20 @@ async fn extract_and_submit(
 
     // Ensure due date is in the future so on-chain checks pass
     let now = chrono::Utc::now().timestamp();
-    if due_date <= now {
+    // Optional testing override: set SHORT_DUE_SECONDS (seconds) in env
+    let short_due_seconds = env::var("SHORT_DUE_SECONDS")
+        .ok()
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
+
+    if short_due_seconds > 0 {
+        let override_due = now + short_due_seconds;
+        println!(
+            "SHORT_DUE_SECONDS set ({}s); overriding due date to {}",
+            short_due_seconds, override_due
+        );
+        due_date = override_due;
+    } else if due_date <= now {
         // fallback: 30 days from now
         let fallback = now + 30 * 24 * 60 * 60;
         println!(

@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-invoice_claim = "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U"
+invoice_claim = "92icJAeAhsB1fPyoURiaC53pizWW5Kv7NU5X87WdRLBB"
 
 [registry]
 url = "https://api.apr.dev"

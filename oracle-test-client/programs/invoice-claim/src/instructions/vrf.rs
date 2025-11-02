@@ -10,7 +10,7 @@ use crate::state::*;
         let invoice = &ctx.accounts.invoice_account;
 
         require!(
-            invoice.status == InvoiceStatus::Validated,
+            invoice.status == InvoiceStatus::InEscrowAwaitingVRF,
             InvoiceError::InvalidStatus
         );
 
@@ -55,10 +55,8 @@ pub fn callback_invoice_vrf(ctx: Context<CallbackInvoiceVrf>, randomness: [u8; 3
 
     // Only apply VRF outcome immediately after validation.
     // Prevents late/duplicate callbacks from overriding post-VRF states.
-    require!(
-        invoice.status == InvoiceStatus::Validated,
-        InvoiceError::InvalidStatus
-    );
+    // After escrow is funded, VRF decides audit outcome while funds remain locked
+    require!(invoice.status == InvoiceStatus::InEscrowAwaitingVRF, InvoiceError::InvalidStatus);
 
         // Convert bytes → number
         let random_value = u64::from_le_bytes(randomness[..8].try_into().unwrap());
@@ -68,11 +66,11 @@ pub fn callback_invoice_vrf(ctx: Context<CallbackInvoiceVrf>, randomness: [u8; 3
         let audit_selected = random_value % 10_000 < threshold;
 
         // Update status
-        invoice.status = if audit_selected {
-            InvoiceStatus::AuditPending
-        } else {
-            InvoiceStatus::ReadyForPayment
-        };
+    invoice.status = if audit_selected {
+        InvoiceStatus::InEscrowAuditPending
+    } else {
+        InvoiceStatus::InEscrowReadyToSettle
+    };
 
         msg!(
             "Invoice {} | Audit Selected: {} | Random Value: {} | Threshold: {} bps",
