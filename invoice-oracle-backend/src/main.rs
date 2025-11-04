@@ -98,7 +98,7 @@ pub enum RequestStatus {
     Completed,
 }
 
-const PROGRAM_ID: &str = "92icJAeAhsB1fPyoURiaC53pizWW5Kv7NU5X87WdRLBB";
+const PROGRAM_ID: &str = "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U";
 const RPC_URL: &str = "https://api.devnet.solana.com";
 
 #[tokio::main]
@@ -373,8 +373,29 @@ async fn extract_and_submit(
         recent_blockhash,
     );
 
-    let signature = rpc_client.send_and_confirm_transaction(&tx)?;
-    println!("Transaction: {}", signature);
+    let signature = match rpc_client.send_and_confirm_transaction(&tx) {
+        Ok(sig) => {
+            println!("Transaction successful: {}", sig);
+            sig
+        }
+        Err(e) => {
+            eprintln!("Transaction failed: {}", e);
+
+            // Try to get logs from simulation
+            if let Ok(sim) = rpc_client.simulate_transaction(&tx) {
+                eprintln!("\n===== TRANSACTION LOGS =====");
+                if let Some(logs) = sim.value.logs {
+                    for log in logs {
+                        eprintln!("{}", log);
+                    }
+                }
+                eprintln!("============================\n");
+            }
+
+            return Err(e.into());
+        }
+    };
+
 
     // Post-submit verification: fetch on-chain invoice account and log its amount
     if let Ok(acc) = rpc_client.get_account(&invoice_pda) {

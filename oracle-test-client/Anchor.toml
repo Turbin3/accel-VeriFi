@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-invoice_claim = "92icJAeAhsB1fPyoURiaC53pizWW5Kv7NU5X87WdRLBB"
+invoice_claim = "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U"
 
 [registry]
 url = "https://api.apr.dev"
@@ -19,6 +19,7 @@ bootstrap = "npx ts-node -P ./tsconfig.json scripts/bootstrap.ts"
 request-vrf = "npx ts-node -P ./tsconfig.json scripts/request_vrf.ts"
 submit = "npx ts-node -P ./tsconfig.json scripts/submit_request.ts"
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
-test-invoice = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/invoice-test.ts"
+test-invoice = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/invoice-flow-test.ts"
+test-invoice-e2e = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/invoice-e2e-live-vrf.ts"
 test-org = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/org-test.ts"
 test-vendor = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/vendor-test.ts"

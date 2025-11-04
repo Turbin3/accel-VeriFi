@@ -1,0 +1,46 @@
+:root {
+  --color-primary: #3b82f6;
+  --color-primary-dark: #1e40af;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Wallet Adapter Styles */
+.wallet-adapter-button {
+  background-color: var(--color-primary) !important;
+  border-radius: 8px;
+  font-weight: 500;
+  padding: 8px 16px;
+}
+
+.wallet-adapter-button:hover {
+  background-color: var(--color-primary-dark) !important;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-in-out;
+}

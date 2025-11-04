@@ -2,7 +2,7 @@
 #![allow(deprecated)]
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::{anchor::{commit,delegate,ephemeral}, cpi::DelegateConfig};
-declare_id!("92icJAeAhsB1fPyoURiaC53pizWW5Kv7NU5X87WdRLBB");
+declare_id!("DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U");
 
 pub const CALLBACK_VRF_DISCRIMINATOR: [u8; 7] = *b"clbrand"; 
 mod state;
