@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // VendorManagement.tsx
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
@@ -17,9 +19,7 @@ import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { Buffer } from "buffer";
 import IDL from "../../../../oracle-test-client/target/idl/invoice_claim.json";
 
-const PROGRAM_ID = new PublicKey(
-  "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U"
-);
+const PROGRAM_ID = new PublicKey(import.meta.env.VITE_PROGRAM_ID);
 
 interface Vendor {
   name: string;
@@ -55,11 +55,8 @@ export function VendorManagement() {
     setError("");
 
     try {
-      const provider = new AnchorProvider(connection, wallet as any, {
-        commitment: "confirmed",
-      });
+      
 
-      const program = new Program(IDL, provider);
       const authority = wallet.publicKey;
 
       // Derive org config PDA
@@ -67,10 +64,6 @@ export function VendorManagement() {
         [Buffer.from("org_config"), authority.toBuffer()],
         PROGRAM_ID
       );
-
-      // Fetch org config to verify it exists
-      const orgConfig = await program.account.orgConfig.fetch(orgConfigPda);
-      console.log("Org Config fetched:", orgConfig);
 
       // Fetch all program accounts
       const allAccounts = await connection.getProgramAccounts(PROGRAM_ID);
@@ -188,6 +181,7 @@ export function VendorManagement() {
           systemProgram: SystemProgram.programId,
         })
         .rpc();
+      console.log("Tx: ", tx);
 
       setNewVendorName("");
       setNewVendorWallet("");

@@ -2,10 +2,11 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
-import nodeGlobalsPolyfill from "@esbuild-plugins/node-globals-polyfill";
+// import nodeGlobalsPolyfill from "@esbuild-plugins/node-globals-polyfill";
+import { nodePolyfills } from "vite-plugin-node-polyfills";
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), nodePolyfills()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -16,12 +17,7 @@ export default defineConfig({
       supported: {
         bigint: true,
       },
-      plugins: [
-        nodeGlobalsPolyfill.default({
-          buffer: true,
-          process: true,
-        }),
-      ],
+      plugins: [],
     },
   },
   define: {

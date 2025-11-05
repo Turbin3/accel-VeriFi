@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Buffer } from "buffer";
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -12,9 +13,7 @@ interface SetupPageProps {
   onComplete: () => void;
 }
 
-const PROGRAM_ID = new PublicKey(
-  "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U"
-);
+const PROGRAM_ID = new PublicKey(import.meta.env.VITE_PROGRAM_ID);
 
 // Solana Devnet USDC Mint
 const USDC_MINT_DEVNET = new PublicKey(

@@ -1,16 +1,15 @@
 import { useState } from "react";
-import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { AdminDashboard } from "@/components/Dashboard/AdminDashboard";
 import UserHomepage from "@/components/Dashboard/UserHomepage";
 import { SetupPage } from "@/components/Dashboard/SetupPage";
 import { VendorManagement } from "@/components/Dashboard/VendorManagement";
 import { InvoiceManagement } from "@/components/Dashboard/InvoiceManagement";
-import { UploadInvoice } from "@/components/Dashboard/UploadInvoice";
 import { useSolanaWallet } from "./WalletProvider";
+import { UploadInvoice } from "./components/Dashboard/UploadInvoice";
 
 export default function App() {
-  const [role, setRole] = useState<"admin" | "user">("user");
+  const [, setRole] = useState<"admin" | "user">("user");
   const [showSetup, setShowSetup] = useState(false);
   const [orgCreated, setOrgCreated] = useState(false);
   const [currentPage, setCurrentPage] = useState<
@@ -37,7 +36,7 @@ export default function App() {
 
   return (
     <WalletProvider>
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-x-hidden">
+      <div className="min-h-screen w-full bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 overflow-x-hidden">
         {/* Navigation */}
         <nav className="border-b border-slate-700/50 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-50 w-full">
           <div className="max-w-7xl mx-auto px-6 py-4">
@@ -51,7 +50,7 @@ export default function App() {
                   setCurrentPage("home");
                 }}
               >
-                <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-emerald-600 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-linear-to-br from-green-400 to-emerald-600 rounded-lg flex items-center justify-center">
                   <span className="text-white font-bold text-lg">✅</span>
                 </div>
                 <h1 className="text-2xl font-bold text-white">VeriFi</h1>
@@ -89,7 +88,7 @@ export default function App() {
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => setCurrentPage("upload")}
-                  className="px-4 py-2 rounded-lg font-medium transition-all bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700"
+                  className="px-4 py-2 rounded-lg font-medium transition-all bg-linear-to-r from-violet-500 to-purple-600 text-white hover:from-violet-600 hover:to-purple-700"
                 >
                   Upload Invoice
                 </button>
@@ -109,7 +108,7 @@ export default function App() {
                 >
                   Admin
                 </button>
-                <WalletMultiButton className="!bg-gradient-to-r !from-emerald-500 !to-green-600 hover:!from-emerald-600 hover:!to-green-700 !rounded-lg !px-6" />
+                <WalletMultiButton className="bg-linear-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 rounded-lg px-6" />
               </div>
             </div>
           </div>

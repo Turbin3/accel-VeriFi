@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
@@ -13,10 +15,7 @@ import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { Buffer } from "buffer";
 import IDL from "../../../../oracle-test-client/target/idl/invoice_claim.json";
 
-const PROGRAM_ID = new PublicKey(
-  "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U"
-);
-
+const PROGRAM_ID = new PublicKey(import.meta.env.VITE_PROGRAM_ID);
 const PINATA_JWT = import.meta.env.VITE_PINATA_JWT || "";
 
 interface Organization {
@@ -61,11 +60,7 @@ export function UploadInvoice() {
     setLoadingOrgs(true);
 
     try {
-      const provider = new AnchorProvider(connection, wallet as any, {
-        commitment: "confirmed",
-      });
 
-      const program = new Program(IDL, provider);
 
       // Fetch all program accounts
       const allAccounts = await connection.getProgramAccounts(PROGRAM_ID);

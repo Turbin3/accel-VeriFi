@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // InvoiceManagement.tsx
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
@@ -10,14 +11,10 @@ import {
   DollarSign,
 } from "lucide-react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { Program, AnchorProvider } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { Buffer } from "buffer";
-import IDL from "../../../../oracle-test-client/target/idl/invoice_claim.json";
 
-const PROGRAM_ID = new PublicKey(
-  "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U"
-);
+const PROGRAM_ID = new PublicKey(import.meta.env.VITE_PROGRAM_ID);
 
 interface Invoice {
   authority: string;
@@ -88,11 +85,6 @@ export function InvoiceManagement() {
     setError("");
 
     try {
-      const provider = new AnchorProvider(connection, wallet as any, {
-        commitment: "confirmed",
-      });
-
-      const program = new Program(IDL, provider);
       const authority = wallet.publicKey;
 
       // Derive org config PDA
@@ -102,10 +94,6 @@ export function InvoiceManagement() {
       );
 
       console.log("📋 Fetching invoices for org:", orgConfigPda.toBase58());
-
-      // Fetch org config
-      const orgConfig = await program.account.orgConfig.fetch(orgConfigPda);
-      console.log("✅ Org Config fetched:", orgConfig);
 
       // Fetch all program accounts
       const allAccounts = await connection.getProgramAccounts(PROGRAM_ID);
@@ -286,7 +274,7 @@ export function InvoiceManagement() {
   const totalInvoices = invoices.length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6">
+    <div className="min-h-screen bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6">
       <motion.div
         className="max-w-7xl mx-auto"
         variants={fadeIn}
