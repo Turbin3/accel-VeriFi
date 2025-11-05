@@ -17,7 +17,7 @@ no-log-ix-name = []
 idl-build = ["anchor-lang/idl-build"]
 
 [dependencies]
-anchor-lang = "0.31.1"
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
 anchor-spl  = "0.31.1"
 ephemeral-rollups-sdk = { version = "0.2.12", features = ["anchor"] }
 ephemeral-vrf-sdk = { version = "0.2.0", features = ["anchor"] }

@@ -4,39 +4,93 @@ use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::{anchor::{commit,delegate,ephemeral}, cpi::DelegateConfig};
 declare_id!("DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U");
 
-pub const CALLBACK_VRF_DISCRIMINATOR: [u8; 7] = *b"clbrand"; 
+pub const CALLBACK_VRF_DISCRIMINATOR: [u8; 7] = *b"clbrand";
 mod state;
 mod instructions;
 
-pub use crate::state::*;
-pub use crate::instructions::*;
+use crate::state::*;
+use crate::instructions::*;
 
-
-#[program]
 #[ephemeral]
+#[program]
 pub mod invoice_claim {
     use super::*;
 
     // Invoice request + OCR fulfillment
-    pub fn request_invoice_extraction(ctx: Context<RequestExtraction>, ipfs_hash: String, amount: u64) -> Result<()> {
-        instructions::invoice::request_invoice_extraction(ctx, ipfs_hash,amount)
+    pub fn request_invoice_extraction(
+        ctx: Context<RequestExtraction>,
+        ipfs_hash: String,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::invoice::request_invoice_extraction(ctx, ipfs_hash, amount)
     }
 
-    pub fn process_extraction_result(
-        ctx: Context<ProcessResult>,
+    // Submitting the extracted invoice data
+    pub fn submit_extraction_result(
+        ctx: Context<SubmitExtraction>,
         vendor_name: String,
-        amount: u64,
+        extracted_amount: u64,
         due_date: i64,
     ) -> Result<()> {
-        instructions::invoice::process_extraction_result(ctx, vendor_name, amount, due_date)
+        instructions::invoice::submit_extraction_result(
+            ctx,
+            vendor_name,
+            extracted_amount,
+            due_date,
+        )
     }
 
-    pub fn request_invoice_audit_vrf(ctx: Context<RequestInvoiceAuditVrf>, client_seed: u8) -> Result<()> {
+    // Delegating the invoice to the Magicblock ER for private processing
+    pub fn delegate_invoice_to_er(ctx: Context<DelegateInvoice>) -> Result<()> {
+        msg!("Delegating invoice to MagicBlock ER for private processing");
+
+        ctx.accounts.delegate_invoice(
+            &ctx.accounts.authority,
+            &[],
+            DelegateConfig {
+                validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    }
+
+    /// Funding amount and source are confidential on ER
+    pub fn fund_escrow_on_er(ctx: Context<FundEscrowOnER>, amount: u64) -> Result<()> {
+        instructions::escrow::fund_escrow_on_er(ctx, amount)
+    }
+
+    /// Settle to vendor (PRIVATE on ER)
+    pub fn settle_to_vendor_on_er(ctx: Context<SettleOnER>) -> Result<()> {
+        instructions::escrow::settle_to_vendor(ctx)
+    }
+
+    /// Validate payment (PRIVATE on ER)
+    pub fn validate_payment_on_er(ctx: Context<ValidatePaymentOnER>) -> Result<()> {
+        instructions::payments::validate_payment_on_er(ctx)
+    }
+
+    /// Commit and return to L1
+    pub fn commit_and_return_to_l1(ctx: Context<CommitAndReturn>) -> Result<()> {
+        instructions::invoice::commit_and_return_to_l1(ctx)
+    }
+
+    pub fn refund_escrow_on_er(ctx: Context<RefundEscrow>) -> Result<()> {
+        instructions::escrow::refund_escrow(ctx)
+    }
+
+    pub fn request_invoice_audit_vrf(
+        ctx: Context<RequestInvoiceAuditVrf>,
+        client_seed: u8,
+    ) -> Result<()> {
         instructions::vrf::request_invoice_audit_vrf(ctx, client_seed)
     }
 
     #[instruction(discriminator = &CALLBACK_VRF_DISCRIMINATOR)]
-    pub fn callback_invoice_vrf(ctx: Context<CallbackInvoiceVrf>, randomness: [u8; 32]) -> Result<()> {
+    pub fn callback_invoice_vrf(
+        ctx: Context<CallbackInvoiceVrf>,
+        randomness: [u8; 32],
+    ) -> Result<()> {
         instructions::vrf::callback_invoice_vrf(ctx, randomness)
     }
 
@@ -72,21 +126,22 @@ pub mod invoice_claim {
         daily_cap: u64,
         audit_rate_bps: u16,
     ) -> Result<()> {
-        instructions::org::org_init(ctx, treasury_vault, mint, per_invoice_cap, daily_cap, audit_rate_bps)
+        instructions::org::org_init(
+            ctx,
+            treasury_vault,
+            mint,
+            per_invoice_cap,
+            daily_cap,
+            audit_rate_bps,
+        )
     }
 
     // Update Org Config
-    pub fn update_org_config(ctx: Context<UpdateOrgConfig>, update_args: UpdateOrgConfigArgs) -> Result<()> {
+    pub fn update_org_config(
+        ctx: Context<UpdateOrgConfig>,
+        update_args: UpdateOrgConfigArgs,
+    ) -> Result<()> {
         instructions::org::update_org_config(ctx, update_args)
-    }
-
-    // Escrow MVP
-    pub fn fund_escrow(ctx: Context<FundEscrow>) -> Result<()> {
-        instructions::escrow::fund_escrow(ctx)
-    }
-
-    pub fn settle_to_vendor(ctx: Context<SettleToVendor>) -> Result<()> {
-        instructions::escrow::settle_to_vendor(ctx)
     }
 
     //Vendor Management
@@ -109,50 +164,17 @@ pub mod invoice_claim {
     pub fn update_vendor_wallet(ctx: Context<ManageVendor>, new_wallet: Pubkey) -> Result<()> {
         instructions::vendor::update_vendor_wallet(ctx, new_wallet)
     }
- pub fn delegate_invoice_extraction(ctx: Context<DelegateExtraction>) -> Result<()> {
-        // no need to pass seeds again because the macro knows them
-        ctx.accounts.delegate_invoice_request(
-            &ctx.accounts.authority,
-            &[],
-            DelegateConfig {
-                validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
-                ..Default::default()
-            },
-        )?;
-        Ok(())
-    }
- pub fn commit_invoice_extraction(
-        ctx: Context<CommitInvoice>,
-        extracted_amount: u64,
-        extracted_vendor: Pubkey,
-    ) -> Result<()> {
-        let invoice = &mut ctx.accounts.invoice_request;
-        invoice.amount = extracted_amount;
-        invoice.authority = extracted_vendor;
-        invoice.status = RequestStatus::Completed;
-
-        Ok(())
-    }
-
 }
+
 #[delegate]
 #[derive(Accounts)]
-pub struct DelegateExtraction<'info> {
-    // NOTE: use the same seeds used when creating invoice_request
-    #[account(mut, del, seeds = [b"request", authority.key().as_ref()], bump)]
-    pub invoice_request: Account<'info, InvoiceRequest>,
+pub struct DelegateInvoice<'info> {
+    // Delegate the invoice (which already has OCR data)
+    #[account(mut, del, seeds = [b"invoice", authority.key().as_ref()], bump)]
+    pub invoice: Account<'info, InvoiceAccount>,
 
     #[account(mut)]
-    pub authority: Signer<'info>, // must be the same authority used when creating the request
-
-    pub system_program: Program<'info, System>,
-}
-
-#[commit]
-#[derive(Accounts)]
-pub struct CommitInvoice<'info> {
-    #[account(mut)]
-    pub invoice_request: Account<'info, InvoiceRequest>,
+    pub authority: Signer<'info>,
 
     pub system_program: Program<'info, System>,
 }
