@@ -13,7 +13,7 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Program, AnchorProvider, BN } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { Buffer } from "buffer";
-import IDL from "../../../../oracle-test-client/target/idl/invoice_claim.json";
+import IDL from "../../invoice_claim.json";
 
 const PROGRAM_ID = new PublicKey(import.meta.env.VITE_PROGRAM_ID);
 const PINATA_JWT = import.meta.env.VITE_PINATA_JWT || "";

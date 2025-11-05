@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { AnchorProvider, Program } from "@coral-xyz/anchor";
-import IDL from "../../../../oracle-test-client/target/idl/invoice_claim.json";
+import IDL from "../../invoice_claim.json";
 
 export function useProgram() {
   const { connection } = useConnection();

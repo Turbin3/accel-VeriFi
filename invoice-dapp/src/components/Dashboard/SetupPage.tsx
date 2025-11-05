@@ -7,7 +7,7 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Program, AnchorProvider, BN } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
-import IDL from "../../../../oracle-test-client/target/idl/invoice_claim.json";
+import IDL from "../../invoice_claim.json";
 
 interface SetupPageProps {
   onComplete: () => void;
