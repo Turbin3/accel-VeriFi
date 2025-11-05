@@ -10,6 +10,7 @@ use std::str::FromStr;
 use std::time::Duration;
 use dotenvy::dotenv;
 use sha2::{Digest, Sha256};
+use std::fmt::Write as _;
 
 #[derive(Clone, Debug)]
 pub struct InvoiceRequest {
@@ -181,6 +182,10 @@ async fn process_pending_requests(
                 println!("IPFS: {}", request.ipfs_hash);
                 println!("Status: {:?}", request.status);
 
+                // Explicit amount logging in base units (pre-OCR placeholder value on the request)
+                let decimals: u8 = env::var("MINT_DECIMALS").ok().and_then(|s| s.parse().ok()).unwrap_or(6);
+                log_amount("Request amount (pre-OCR placeholder)", request.amount, decimals);
+
                 if matches!(request.status, RequestStatus::Pending) {
                     println!("\nFound PENDING request!");
 
@@ -276,7 +281,13 @@ async fn extract_and_submit(
 
     let (vendor, amount, mut due_date) = parse_invoice(ocr_text);
     println!("Vendor: {}", vendor);
-    println!("Amount: ${}", amount as f64 / 1_000_000.0);
+    // Amount logging with base units + humanized form
+    let decimals: u8 = env::var("MINT_DECIMALS").ok().and_then(|s| s.parse().ok()).unwrap_or(6);
+    log_amount("Parsed amount", amount, decimals);
+
+    if amount == 0 {
+        eprintln!("Warning: parsed amount_base_units is 0; check OCR and parsing rules");
+    }
     println!("Due Date: {}", due_date);
 
     // Ensure due date is in the future so on-chain checks pass
@@ -365,6 +376,17 @@ async fn extract_and_submit(
     let signature = rpc_client.send_and_confirm_transaction(&tx)?;
     println!("Transaction: {}", signature);
 
+    // Post-submit verification: fetch on-chain invoice account and log its amount
+    if let Ok(acc) = rpc_client.get_account(&invoice_pda) {
+        if let Ok(inv) = InvoiceAccountLite::from_account_data(&acc.data) {
+            log_amount("On-chain invoice.amount", inv.amount, decimals);
+        } else {
+            eprintln!("Note: could not decode on-chain InvoiceAccount for post-submit verification");
+        }
+    } else {
+        eprintln!("Note: could not fetch on-chain InvoiceAccount for post-submit verification");
+    }
+
     // Optionally auto-request VRF after successful validation
     if env::var("AUTO_REQUEST_VRF").unwrap_or_default() == "1" {
         if let Err(e) = request_vrf_for_invoice(rpc_client, keypair, program_id, &invoice_pda).await {
@@ -412,8 +434,8 @@ fn parse_invoice(text: &str) -> (String, u64, i64) {
     let amount_float: f64 = amount_str.parse().unwrap_or(0.0);
     let amount = (amount_float * 1_000_000.0) as u64;
 
-    println!("  Amount: ${} (raw: {})", amount as f64 / 1_000_000.0, amount_str);
-
+    println!("  Amount (OCR extracted string): {}", amount_str);
+    
     // Extract due date
     let date_re = Regex::new(r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(\d{4})").unwrap();
     let due_date = if let Some(caps) = date_re.captures(text) {
@@ -446,6 +468,82 @@ fn parse_invoice(text: &str) -> (String, u64, i64) {
     println!("================================\n");
 
     (vendor, amount, due_date)
+}
+
+fn log_amount(label: &str, amount_base_units: u64, decimals: u8) {
+    // Base units as string
+    let base_units_str = amount_base_units.to_string();
+
+    // LE & BE hex (from the same u64)
+    let le_hex = {
+        let mut s = String::with_capacity(16);
+        for b in amount_base_units.to_le_bytes() {
+            let _ = write!(&mut s, "{:02x}", b);
+        }
+        s
+    };
+    let be_hex = {
+        let mut s = String::with_capacity(16);
+        for b in amount_base_units.to_be_bytes() {
+            let _ = write!(&mut s, "{:02x}", b);
+        }
+        s
+    };
+
+    // Exact human string via integer math (no f64)
+    let denom = 10_u128.pow(decimals as u32);
+    let base = amount_base_units as u128;
+    let ui_int = base / denom;
+    let ui_frac = base % denom;
+    let human_exact = format!(
+        "{}.{}",
+        ui_int,
+        format!("{:0width$}", ui_frac, width = decimals as usize)
+    );
+
+    println!(
+        "{} => amount_base_units: {}, le_hex: 0x{}, be_hex: 0x{}, decimals: {}, human_value: {}",
+        label, base_units_str, le_hex, be_hex, decimals, human_exact
+    );
+}
+
+// Minimal decoder for InvoiceAccount to read `amount` after variable-length vendor_name
+#[derive(Clone, Debug)]
+struct InvoiceAccountLite {
+    pub amount: u64,
+}
+
+impl InvoiceAccountLite {
+    pub fn from_account_data(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
+        // Anchor account discriminator (8 bytes) + fields
+        let mut offset = 8;
+
+        // authority (32)
+        if offset + 32 > data.len() { return Err("InvoiceAccount: short read (authority)".into()); }
+        offset += 32;
+
+        // vendor (32)
+        if offset + 32 > data.len() { return Err("InvoiceAccount: short read (vendor)".into()); }
+        offset += 32;
+
+        // vendor_name length (4) + bytes
+        if offset + 4 > data.len() { return Err("InvoiceAccount: short read (vendor_name len)".into()); }
+        let name_len = u32::from_le_bytes([
+            data[offset], data[offset+1], data[offset+2], data[offset+3]
+        ]) as usize;
+        offset += 4;
+        if offset + name_len > data.len() { return Err("InvoiceAccount: short read (vendor_name)".into()); }
+        offset += name_len;
+
+        // amount (u64)
+        if offset + 8 > data.len() { return Err("InvoiceAccount: short read (amount)".into()); }
+        let amount = u64::from_le_bytes([
+            data[offset], data[offset+1], data[offset+2], data[offset+3],
+            data[offset+4], data[offset+5], data[offset+6], data[offset+7]
+        ]);
+
+        Ok(InvoiceAccountLite { amount })
+    }
 }
 
 // Send our program's request_invoice_audit_vrf instruction
