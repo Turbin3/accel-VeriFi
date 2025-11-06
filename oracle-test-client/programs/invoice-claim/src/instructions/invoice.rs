@@ -144,6 +144,13 @@ pub struct AuditDecide<'info> {
         bump
     )]
     pub invoice_account: Account<'info, InvoiceAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"payment_queue", org_config.key().as_ref()],
+        bump
+    )]
+    pub payment_queue: Account<'info, PaymentQueue>,
 }
 
 pub fn audit_decide(ctx: Context<AuditDecide>, approve: bool) -> Result<()> {
@@ -157,11 +164,28 @@ pub fn audit_decide(ctx: Context<AuditDecide>, approve: bool) -> Result<()> {
     let invoice = &mut ctx.accounts.invoice_account;
     require!(invoice.status == InvoiceStatus::InEscrowAuditPending, InvoiceError::InvalidStatus);
 
-    invoice.status = if approve {
-        InvoiceStatus::InEscrowReadyToSettle
+    if approve {
+        invoice.status = InvoiceStatus::InEscrowReadyToSettle;
+
+        // Add to PaymentQueue when audit is approved
+        let queue = &mut ctx.accounts.payment_queue;
+        let already = queue.pending_invoices.iter().any(|p| p.invoice_account == invoice.key());
+        require!(!already, InvoiceError::InvalidStatus);
+
+        let entry = PendingPayment {
+            invoice_account: invoice.key(),
+            vendor: invoice.vendor,
+            due_date: invoice.due_date,
+            amount: invoice.amount,
+        };
+
+        queue.pending_invoices.push(entry);
+        queue.count = queue.pending_invoices.len() as u64;
+        queue.last_updated = Clock::get()?.unix_timestamp;
+        msg!("✓ Added to PaymentQueue after audit approval: {}", invoice.key());
     } else {
-        InvoiceStatus::Refunded
-    };
+        invoice.status = InvoiceStatus::Refunded;
+    }
 
     Ok(())
 }

@@ -134,6 +134,20 @@ pub mod invoice_claim {
         Ok(())
     }
 
+    //Payment queue
+    pub fn init_payment_queue(ctx: Context<InitPaymentQueue>) -> Result<()> {
+        instructions::payment_queue::init_payment_queue(ctx)
+    }
+
+    pub fn add_to_payment_queue(ctx: Context<AddToPaymentQueue>) -> Result<()> {
+        instructions::payment_queue::add_to_payment_queue(ctx)
+    }
+
+    pub fn remove_from_payment_queue(ctx: Context<RemoveFromPaymentQueue>, invoice_key: Pubkey) -> Result<()> {
+        instructions::payment_queue::remove_from_payment_queue(ctx, invoice_key)
+    }
+
+
 }
 #[delegate]
 #[derive(Accounts)]

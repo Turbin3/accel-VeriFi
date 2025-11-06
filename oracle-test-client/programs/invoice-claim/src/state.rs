@@ -1,5 +1,25 @@
 use anchor_lang::prelude::*;
 
+
+#[account]
+#[derive(InitSpace)]
+pub struct PaymentQueue {
+    pub org: Pubkey,                    // Links to OrgConfig
+    #[max_len(1000)]
+    pub pending_invoices: Vec<PendingPayment>,
+    pub count: u64,                     // Total entries
+    pub last_updated: i64,              // Last time queue was modified
+    pub bump: u8,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
+pub struct PendingPayment {
+    pub invoice_account: Pubkey,        // Reference to InvoiceAccount
+    pub vendor: Pubkey,                 // Vendor pubkey (redundant but speeds up cranker)
+    pub due_date: i64,                  // Due date timestamp
+    pub amount: u64,                    // Invoice amount
+}
+
 #[account]
 #[derive(InitSpace)]
 pub struct InvoiceRequest {
