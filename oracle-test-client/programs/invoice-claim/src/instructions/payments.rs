@@ -5,7 +5,7 @@ use crate::state::*;
 pub struct ProcessPayment<'info> {
     #[account(
         mut,
-        seeds = [b"invoice", authority.key().as_ref()],
+        seeds = [b"invoice", authority.key().as_ref(), &invoice_account.nonce.to_le_bytes()],
         bump,
         has_one = authority
     )]
@@ -37,7 +37,7 @@ pub fn process_invoice_payment(ctx: Context<ProcessPayment>) -> Result<()> {
 pub struct CompletePayment<'info> {
     #[account(
         mut,
-        seeds = [b"invoice", authority.key().as_ref()],
+        seeds = [b"invoice", authority.key().as_ref(), &invoice_account.nonce.to_le_bytes()],
         bump,
         has_one = authority
     )]

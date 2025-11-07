@@ -227,7 +227,7 @@ export function InvoiceManagement() {
             authority: authority_pubkey.toBase58(),
             vendor: vendor_pubkey.toBase58(),
             vendorName: vendor_name,
-            amount: Number(amount),
+            amount: Number(amount)/ 1_000_000,
             dueDate: Number(due_date),
             ipfsHash: ipfs_hash,
             status,

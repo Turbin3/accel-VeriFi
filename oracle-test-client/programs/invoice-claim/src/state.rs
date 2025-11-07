@@ -5,7 +5,7 @@ use anchor_lang::prelude::*;
 #[derive(InitSpace)]
 pub struct PaymentQueue {
     pub org: Pubkey,                    // Links to OrgConfig
-    #[max_len(1000)]
+    #[max_len(100)]
     pub pending_invoices: Vec<PendingPayment>,
     pub count: u64,                     // Total entries
     pub last_updated: i64,              // Last time queue was modified
@@ -29,6 +29,7 @@ pub struct InvoiceRequest {
     pub status: RequestStatus,
     pub timestamp: i64,
     pub amount: u64,
+    pub nonce: u64,
 }
 
 #[account]
@@ -44,6 +45,7 @@ pub struct InvoiceAccount {
     pub ipfs_hash: String,
     pub status: InvoiceStatus,
     pub timestamp: i64,
+    pub nonce: u64,
 }
 
 //A singleton state that manages the full protocol

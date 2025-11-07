@@ -19,6 +19,7 @@ pub struct InvoiceRequest {
     pub status: RequestStatus,
     pub timestamp: i64,
     pub amount: u64,
+    pub nonce: u64,
 }
 
 impl InvoiceRequest {
@@ -81,13 +82,24 @@ impl InvoiceRequest {
             data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
             data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7]
         ]);
+        offset += 8;
+
+        // Read nonce (u64) if present; default to 0 for backward-compat
+        let mut nonce: u64 = 0;
+        if offset + 8 <= data.len() {
+            nonce = u64::from_le_bytes([
+                data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+                data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7]
+            ]);
+        }
 
         Ok(InvoiceRequest {
             authority,
             ipfs_hash,
             status,
             timestamp,
-            amount
+            amount,
+            nonce,
         })
     }
 }
@@ -98,7 +110,7 @@ pub enum RequestStatus {
     Completed,
 }
 
-const PROGRAM_ID: &str = "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U";
+const PROGRAM_ID: &str = "6uW3Hfd7x3qwiYKVxPHKep849FxWhmTRmDD7q73Svhbw";
 const RPC_URL: &str = "https://api.devnet.solana.com";
 
 #[tokio::main]
@@ -256,16 +268,65 @@ async fn extract_and_submit(
         .expect("OCR_API_KEY must be set in .env file");
 
 
-    let ocr_url = format!(
-        "https://api.ocr.space/parse/imageurl?apikey={}&url=https://emerald-abundant-baboon-978.mypinata.cloud/ipfs/{}&language=eng&OCREngine=2",
-        api_key,
-        request.ipfs_hash
+    // Some gateways/CIDs have no file extension, so hint the OCR filetype explicitly
+    let ocr_filetype = env::var("OCR_FILETYPE").unwrap_or_else(|_| "pdf".to_string());
+    // Allow trying multiple IPFS gateways in order
+    let gateways_csv = env::var("IPFS_GATEWAYS").unwrap_or_else(|_|
+        "https://emerald-abundant-baboon-978.mypinata.cloud/ipfs,https://ipfs.io/ipfs,https://gateway.pinata.cloud/ipfs".to_string()
     );
 
     println!("Calling OCR API...");
     let client = reqwest::Client::new();
-    let response = client.get(&ocr_url).send().await?;
-    let json: serde_json::Value = response.json().await?;
+    let mut json: serde_json::Value = serde_json::json!({});
+    let mut last_err: Option<String> = None;
+    let mut tried = Vec::new();
+
+    for gw in gateways_csv.split(',') {
+        let gw = gw.trim();
+        if gw.is_empty() { continue; }
+        let ipfs_url = format!(
+            "{}/{}?filename=invoice.{}",
+            gw.trim_end_matches('/'),
+            request.ipfs_hash,
+            ocr_filetype
+        );
+        let ocr_url = format!(
+            "https://api.ocr.space/parse/imageurl?apikey={}&url={}&language=eng&OCREngine=2&filetype={}",
+            api_key,
+            ipfs_url,
+            ocr_filetype
+        );
+        println!("Trying OCR via gateway: {}", gw);
+        tried.push(gw.to_string());
+        match client.get(&ocr_url).send().await {
+            Ok(resp) => {
+                match resp.json::<serde_json::Value>().await {
+                    Ok(v) => {
+                        let errored = v.get("IsErroredOnProcessing").and_then(|b| b.as_bool()).unwrap_or(false);
+                        if !errored {
+                            json = v;
+                            break;
+                        } else {
+                            last_err = Some(format!("OCR error via {}: {:?}", gw, v.get("ErrorMessage")));
+                        }
+                    }
+                    Err(e) => {
+                        last_err = Some(format!("Failed to parse OCR response via {}: {}", gw, e));
+                    }
+                }
+            }
+            Err(e) => {
+                last_err = Some(format!("HTTP error via {}: {}", gw, e));
+            }
+        }
+    }
+    if json.as_object().map(|m| m.is_empty()).unwrap_or(true) {
+        return Err(format!(
+            "OCR failed across gateways (tried: {}): {}",
+            tried.join(", "),
+            last_err.unwrap_or_else(|| "unknown error".to_string())
+        ).into());
+    }
 
 
     println!("\n===== RAW OCR API RESPONSE =====");
@@ -317,7 +378,11 @@ async fn extract_and_submit(
 
     // Derive PDAs used by process_extraction_result
     let (invoice_pda, _) = Pubkey::find_program_address(
-        &[b"invoice", request.authority.as_ref()],
+        &[
+            b"invoice",
+            request.authority.as_ref(),
+            &request.nonce.to_le_bytes()
+        ],
         program_id,
     );
 
@@ -373,7 +438,7 @@ async fn extract_and_submit(
         recent_blockhash,
     );
 
-    let signature = match rpc_client.send_and_confirm_transaction(&tx) {
+    let _signature = match rpc_client.send_and_confirm_transaction(&tx) {
         Ok(sig) => {
             println!("Transaction successful: {}", sig);
             sig

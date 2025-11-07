@@ -13,7 +13,7 @@ pub struct FundEscrow<'info> {
 
     #[account(
         mut,
-        seeds = [b"invoice", authority.key().as_ref()],
+        seeds = [b"invoice", authority.key().as_ref(), &invoice_account.nonce.to_le_bytes()],
         bump,
         has_one = authority @ InvoiceError::Unauthorized
     )]
@@ -80,7 +80,7 @@ pub struct SettleToVendor<'info> {
 
     #[account(
         mut,
-        seeds = [b"invoice", authority.key().as_ref()],
+        seeds = [b"invoice", authority.key().as_ref(), &invoice_account.nonce.to_le_bytes()],
         bump,
         has_one = authority @ InvoiceError::Unauthorized
     )]

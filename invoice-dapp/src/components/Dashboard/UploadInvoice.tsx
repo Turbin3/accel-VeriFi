@@ -239,22 +239,24 @@ export function UploadInvoice() {
         commitment: "confirmed",
       });
 
-      const program = new Program(IDL, provider);
+      const program = new Program(IDL as any, provider);
       const authority = wallet.publicKey;
 
       // Derive InvoiceRequest PDA
+      const nonce = new BN(Date.now());
+      const nonceLe = Buffer.from(nonce.toArrayLike(Buffer, "le", 8));
       const [invoiceRequestPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("request"), authority.toBuffer()],
+        [Buffer.from("request"), authority.toBuffer(), nonceLe],
         PROGRAM_ID
       );
 
       console.log("📋 InvoiceRequest PDA:", invoiceRequestPda.toBase58());
 
       const tx = await program.methods
-        .requestInvoiceExtraction(ipfsHash, new BN(amount))
+        .requestInvoiceExtraction(ipfsHash, new BN(amount), nonce)
         .accounts({
-          invoiceRequest: invoiceRequestPda,
           authority: authority,
+          invoiceRequest: invoiceRequestPda,
           systemProgram: SystemProgram.programId,
         })
         .rpc();

@@ -6,7 +6,7 @@ pub struct CloseInvoice<'info> {
     #[account(
         mut,
         close = authority,
-        seeds = [b"invoice", authority.key().as_ref()],
+        seeds = [b"invoice", authority.key().as_ref(), &invoice_account.nonce.to_le_bytes()],
         bump,
         has_one = authority
     )]
@@ -28,7 +28,7 @@ pub struct CloseRequest<'info> {
     #[account(
         mut,
         close = authority,
-        seeds = [b"request", authority.key().as_ref()],
+        seeds = [b"request", authority.key().as_ref(), &invoice_request.nonce.to_le_bytes()],
         bump,
         has_one = authority
     )]

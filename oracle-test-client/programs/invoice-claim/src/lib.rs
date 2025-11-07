@@ -2,14 +2,14 @@
 #![allow(deprecated)]
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::{anchor::{commit,delegate,ephemeral}, cpi::DelegateConfig};
-declare_id!("DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U");
+declare_id!("6uW3Hfd7x3qwiYKVxPHKep849FxWhmTRmDD7q73Svhbw");
 
 pub const CALLBACK_VRF_DISCRIMINATOR: [u8; 7] = *b"clbrand"; 
 mod state;
 mod instructions;
 
 pub use crate::state::*;
-pub use crate::instructions::*;
+use crate::instructions::*;
 
 
 #[program]
@@ -18,8 +18,13 @@ pub mod invoice_claim {
     use super::*;
 
     // Invoice request + OCR fulfillment
-    pub fn request_invoice_extraction(ctx: Context<RequestExtraction>, ipfs_hash: String, amount: u64) -> Result<()> {
-        instructions::invoice::request_invoice_extraction(ctx, ipfs_hash,amount)
+    pub fn request_invoice_extraction(
+        ctx: Context<RequestExtraction>,
+        ipfs_hash: String,
+        amount: u64,
+        nonce: u64,
+    ) -> Result<()> {
+        instructions::invoice::request_invoice_extraction(ctx, ipfs_hash, amount, nonce)
     }
 
     pub fn process_extraction_result(
@@ -109,6 +114,10 @@ pub mod invoice_claim {
     pub fn update_vendor_wallet(ctx: Context<ManageVendor>, new_wallet: Pubkey) -> Result<()> {
         instructions::vendor::update_vendor_wallet(ctx, new_wallet)
     }
+    // Debug: print the PDA derived by the program for (authority, nonce)
+    pub fn debug_request_pda(ctx: Context<DebugRequestPda>, authority: Pubkey, nonce: u64) -> Result<()> {
+        instructions::invoice::debug_request_pda(ctx, authority, nonce)
+    }
  pub fn delegate_invoice_extraction(ctx: Context<DelegateExtraction>) -> Result<()> {
         // no need to pass seeds again because the macro knows them
         ctx.accounts.delegate_invoice_request(
@@ -153,7 +162,12 @@ pub mod invoice_claim {
 #[derive(Accounts)]
 pub struct DelegateExtraction<'info> {
     // NOTE: use the same seeds used when creating invoice_request
-    #[account(mut, del, seeds = [b"request", authority.key().as_ref()], bump)]
+    #[account(
+        mut,
+        del,
+        seeds = [b"request", authority.key().as_ref(), &invoice_request.nonce.to_le_bytes()],
+        bump
+    )]
     pub invoice_request: Account<'info, InvoiceRequest>,
 
     #[account(mut)]

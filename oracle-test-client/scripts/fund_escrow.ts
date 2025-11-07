@@ -12,10 +12,21 @@ async function main() {
     [Buffer.from("org_config"), wallet.publicKey.toBuffer()],
     program.programId
   );
-  const [invoicePda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("invoice"), wallet.publicKey.toBuffer()],
-    program.programId
-  );
+  // Find the invoice account for this authority by scanning
+  const invoiceDisc = Buffer.from([105, 207, 226, 227, 85, 35, 132, 40]);
+  const accounts = await provider.connection.getProgramAccounts(program.programId);
+  const invAcct = accounts.find(({ account }) => {
+    if (account.data.length < 100) return false;
+    const disc = account.data.slice(0, 8);
+    if (!disc.equals(invoiceDisc)) return false;
+    const auth = new anchor.web3.PublicKey(account.data.slice(8, 40));
+    return auth.equals(wallet.publicKey);
+  });
+  if (!invAcct) {
+    console.log("No invoice account found for this authority");
+    return;
+  }
+  const invoicePda = invAcct.pubkey;
   const [escrowAuthPda] = anchor.web3.PublicKey.findProgramAddressSync(
     [Buffer.from("escrow_auth"), invoicePda.toBuffer()],
     program.programId
