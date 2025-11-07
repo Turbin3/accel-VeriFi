@@ -44,6 +44,7 @@ pub struct InvoiceAccount {
     pub ipfs_hash: String,
     pub status: InvoiceStatus,
     pub timestamp: i64,
+    pub created_at: i64,
 }
 
 //A singleton state that manages the full protocol
@@ -87,6 +88,7 @@ pub enum RequestStatus {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
 pub enum InvoiceStatus {
+    Extracted,
     Validated,
     InEscrowAwaitingVRF,
     InEscrowAuditPending,
@@ -139,4 +141,10 @@ pub enum InvoiceError {
     InvalidWallet,
     #[msg("Invalid IPFS hash")]
     InvalidIPFSHash,
+    #[msg("Invoice request already processed")]
+    AlreadyProcessed,
+    #[msg("Invalid funder")]
+    InvalidFunder,
+    #[msg("Invalid escrow account")]
+    InvalidEscrowAccount,
 }

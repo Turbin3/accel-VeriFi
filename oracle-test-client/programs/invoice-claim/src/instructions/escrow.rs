@@ -1,140 +1,302 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token};
 use crate::state::*;
+use anchor_lang::prelude::*;
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use ephemeral_rollups_sdk::{anchor::commit, ephem::commit_accounts};
 
+#[commit]
 #[derive(Accounts)]
-pub struct FundEscrow<'info> {
+pub struct FundEscrowOnER<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>, // pays rent and fees
+
+    #[account(mut)]
+    pub funder: Signer<'info>, // funds the escrow (provides SPL tokens)
+
     #[account(
         mut,
-        seeds = [b"org_config", org_config.authority.as_ref()],
-        bump = org_config.bump
+        seeds = [b"org_config"],
+        bump
     )]
     pub org_config: Account<'info, OrgConfig>,
 
     #[account(
         mut,
-        seeds = [b"invoice", authority.key().as_ref()],
-        bump,
-        has_one = authority @ InvoiceError::Unauthorized
+        seeds = [b"invoice_account", invoice_account.key().as_ref()],
+        bump
     )]
     pub invoice_account: Account<'info, InvoiceAccount>,
 
-    /// CHECK: PDA only used as signing authority
+    // Initialize escrow token account if not exists
     #[account(
-        seeds = [b"escrow_auth", invoice_account.key().as_ref()],
+        init_if_needed,
+        payer = payer,
+        token::mint = mint,
+        token::authority = escrow_authority,
+        seeds = [b"escrow_token", invoice_account.key().as_ref()],
+        bump
+    )]
+    pub escrow_token_account: Account<'info, TokenAccount>,
+
+    /// CHECK: PDA signer for escrow vault
+    #[account(
+        seeds = [b"escrow_authority", invoice_account.key().as_ref()],
         bump
     )]
     pub escrow_authority: UncheckedAccount<'info>,
 
-    #[account(mut)]
-    pub payer: Signer<'info>,
-    /// CHECK: must equal invoice_account.authority (validated by constraint above)
-    pub authority: UncheckedAccount<'info>,
+    // Funder's SPL token account (source)
+    #[account(
+        mut,
+        constraint = funder_token_account.owner == funder.key() @ InvoiceError::InvalidFunder,
+        constraint = funder_token_account.mint == mint.key() @ InvoiceError::WrongMint
+    )]
+    pub funder_token_account: Account<'info, TokenAccount>,
 
-    #[account(mut)]
-    /// CHECK: payer's SPL token account (validated at runtime)
-    pub payer_ata: UncheckedAccount<'info>,
-    #[account(mut)]
-    /// CHECK: escrow SPL token account owned by escrow authority PDA
-    pub escrow_ata: UncheckedAccount<'info>,
-    /// CHECK: SPL token mint; key checked against OrgConfig
-    pub mint: UncheckedAccount<'info>,
+    pub mint: Account<'info, Mint>,
 
     pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+
+    /// CHECK: MagicBlock ER context
+    pub magic_context: UncheckedAccount<'info>,
+    /// CHECK: MagicBlock program for commits
+    pub magic_program: UncheckedAccount<'info>,
 }
 
-pub fn fund_escrow(ctx: Context<FundEscrow>) -> Result<()> {
-    let cfg = &ctx.accounts.org_config;
-    require!(!cfg.paused, InvoiceError::OrgPaused);
+/// Transfers SPL tokens to escrow token account
+pub fn fund_escrow_on_er(ctx: Context<FundEscrowOnER>, amount: u64) -> Result<()> {
+    msg!("Funding escrow inside MagicBlock ER...");
+    let invoice = &mut ctx.accounts.invoice_account;
+    let org_config = &ctx.accounts.org_config;
 
-    let inv = &mut ctx.accounts.invoice_account;
-    let amount = inv.amount;
-    // Escrow before audit: allow funding when invoice is validated
-    require!(inv.status == InvoiceStatus::Validated, InvoiceError::InvalidStatus);
-    require!(amount <= cfg.per_invoice_cap, InvoiceError::CapExceeded);
+    // Validate invoice and org state
+    require!(
+        matches!(
+            invoice.status,
+            InvoiceStatus::Extracted | InvoiceStatus::Validated
+        ),
+        InvoiceError::InvalidStatus
+    );
+    require!(amount >= invoice.amount, InvoiceError::InvalidAmount);
+    require_keys_eq!(
+        ctx.accounts.mint.key(),
+        org_config.mint,
+        InvoiceError::WrongMint
+    );
 
-    // Ensure mint matches configuration
-    require_keys_eq!(ctx.accounts.mint.key(), cfg.mint, InvoiceError::WrongMint);
+    // Check to ensure is funder is authorized to fund the invoice
+    require_keys_eq!(
+        invoice.authority,
+        ctx.accounts.funder.key(),
+        InvoiceError::Unauthorized
+    );
 
-    // Transfer tokens from payer to escrow
-       // Transfer tokens from payer to escrow
-    token::transfer( CpiContext::new(
+    // Transfer SPL tokens: funder -> escrow vault
+    let transfer_ctx = CpiContext::new(
         ctx.accounts.token_program.to_account_info(),
-     anchor_spl::token::Transfer {
-        from: ctx.accounts.payer_ata.to_account_info(),
-        to: ctx.accounts.escrow_ata.to_account_info(),
-        authority: ctx.accounts.payer.to_account_info(),
-    }),
-    amount)?;
+        Transfer {
+            from: ctx.accounts.funder_token_account.to_account_info(),
+            to: ctx.accounts.escrow_token_account.to_account_info(),
+            authority: ctx.accounts.funder.to_account_info(),
+        },
+    );
+    token::transfer(transfer_ctx, amount)?;
 
-    inv.status = InvoiceStatus::InEscrowAwaitingVRF;
+    invoice.status = InvoiceStatus::InEscrowAwaitingVRF;
+
+    invoice.exit(&crate::ID)?;
+
+    commit_accounts(
+        &ctx.accounts.payer,
+        vec![&ctx.accounts.invoice_account.to_account_info()],
+        &ctx.accounts.magic_context,
+        &ctx.accounts.magic_program,
+    )?;
     Ok(())
 }
 
+#[commit]
 #[derive(Accounts)]
-pub struct SettleToVendor<'info> {
+pub struct SettleOnER<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
     #[account(
-        mut
+        mut,
+        seeds = [b"org_config"],
+        bump
     )]
     pub org_config: Account<'info, OrgConfig>,
 
     #[account(
         mut,
-        seeds = [b"invoice", authority.key().as_ref()],
-        bump,
-        has_one = authority @ InvoiceError::Unauthorized
+        seeds = [b"invoice_account", invoice_account.key().as_ref()],
+        bump
     )]
     pub invoice_account: Account<'info, InvoiceAccount>,
 
-    /// CHECK: PDA only used as signing authority
+    // Escrow's token account (source)
     #[account(
-        seeds = [b"escrow_auth", invoice_account.key().as_ref()],
+        mut,
+        seeds = [b"escrow_token", invoice_account.key().as_ref()],
         bump
     )]
-    pub escrow_authority: UncheckedAccount<'info>,
+    pub escrow_token_account: Account<'info, TokenAccount>,
 
-    #[account(mut)]
-    /// CHECK: vendor's SPL token account (validated at runtime)
-    pub vendor_ata: UncheckedAccount<'info>,
-    #[account(mut)]
-    /// CHECK: escrow SPL token account owned by escrow authority PDA
-    pub escrow_ata: UncheckedAccount<'info>,
-    /// CHECK: SPL token mint
-    pub mint: UncheckedAccount<'info>,
+    // PDA authority that owns escrow token account
+    /// CHECK: PDA authority for escrow token account
+    #[account(
+        seeds = [b"escrow_authority", invoice_account.authority.as_ref()],
+        bump
+    )]
+    pub escrow_authority: AccountInfo<'info>,
+
+    // Vendor's token account (destination)
+    #[account(
+        mut,
+        constraint = vendor_token_account.mint == org_config.mint @ InvoiceError::WrongMint
+    )]
+    pub vendor_token_account: Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,
-
-    /// The invoice owner must authorize settlement
-    pub authority: Signer<'info>,
+    /// CHECK: MagicBlock ER context
+    pub magic_context: UncheckedAccount<'info>,
+    /// CHECK: MagicBlock program for commits
+    pub magic_program: UncheckedAccount<'info>,
 }
 
-pub fn settle_to_vendor(ctx: Context<SettleToVendor>) -> Result<()> {
+pub fn settle_to_vendor(ctx: Context<SettleOnER>) -> Result<()> {
+    msg!("Settling payment to vendor on ER (PRIVATE)");
+
     let cfg = &ctx.accounts.org_config;
     require!(!cfg.paused, InvoiceError::OrgPaused);
 
-    let inv = &mut ctx.accounts.invoice_account;
+    let invoice = &mut ctx.accounts.invoice_account;
     // Settle only when escrowed and cleared to settle
-    require!(inv.status == InvoiceStatus::InEscrowReadyToSettle, InvoiceError::InvalidStatus);
+    require!(
+        invoice.status == InvoiceStatus::InEscrowReadyToSettle,
+        InvoiceError::InvalidStatus
+    );
     // Ensure due date reached
     let now = Clock::get()?.unix_timestamp;
-    require!(now >= inv.due_date, InvoiceError::PaymentNotDue);
-    let amount = inv.amount;
+    require!(now >= invoice.due_date, InvoiceError::PaymentNotDue);
+    let amount = invoice.amount;
 
     // Sign with escrow authority PDA derived from invoice key
     let bump = ctx.bumps.escrow_authority;
-    let invoice_key = inv.key();
+    let invoice_key = invoice.key();
     let bump_seed = [bump];
-    let signer_seeds: &[&[u8]] = &[b"escrow_auth", invoice_key.as_ref(), &bump_seed];
+    let signer_seeds: &[&[u8]] = &[b"escrow_authority", invoice_key.as_ref(), &bump_seed];
     let signer = &[signer_seeds];
 
-    token::transfer(CpiContext::new_with_signer(
-        ctx.accounts.token_program.to_account_info(),
-        anchor_spl::token::Transfer {
-        from: ctx.accounts.escrow_ata.to_account_info(),
-        to: ctx.accounts.vendor_ata.to_account_info(),
-        authority: ctx.accounts.escrow_authority.to_account_info(),
-    },signer,),amount)?;
+    token::transfer(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            anchor_spl::token::Transfer {
+                from: ctx.accounts.escrow_token_account.to_account_info(),
+                to: ctx.accounts.vendor_token_account.to_account_info(),
+                authority: ctx.accounts.escrow_authority.to_account_info(),
+            },
+            signer,
+        ),
+        amount,
+    )?;
 
-    inv.status = InvoiceStatus::Paid;
+    invoice.status = InvoiceStatus::Paid;
+    invoice.exit(&crate::ID)?;
+
+    // Commit final state
+    commit_accounts(
+        &ctx.accounts.payer,
+        vec![&ctx.accounts.invoice_account.to_account_info()],
+        &ctx.accounts.magic_context,
+        &ctx.accounts.magic_program,
+    )?;
+
+    msg!("Settlement committed to L1 (payment details remain private)");
+    Ok(())
+}
+
+#[commit]
+#[derive(Accounts)]
+pub struct RefundEscrow<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"invoice", invoice_account.authority.as_ref()],
+        bump
+    )]
+    pub invoice_account: Account<'info, InvoiceAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"escrow_token", invoice_account.key().as_ref()],
+        bump
+    )]
+    pub escrow_token_account: Account<'info, TokenAccount>,
+
+    #[account(
+        seeds = [b"escrow_authority", invoice_account.key().as_ref()],
+        bump
+    )]
+    pub escrow_authority: AccountInfo<'info>,
+
+    // Refund destination (funder's token account)
+    #[account(mut)]
+    pub funder_token_account: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+    pub magic_context: UncheckedAccount<'info>,
+    pub magic_program: UncheckedAccount<'info>,
+}
+
+pub fn refund_escrow(ctx: Context<RefundEscrow>) -> Result<()> {
+    let invoice = &mut ctx.accounts.invoice_account;
+
+    require!(
+        invoice.status == InvoiceStatus::Refunded,
+        InvoiceError::InvalidStatus
+    );
+
+    let amount = invoice.amount;
+
+    // Sign with escrow authority
+    let bump = ctx.bumps.escrow_authority;
+    let invoice_key = invoice.key();
+    let signer_seeds: &[&[u8]] = &[b"escrow_authority", invoice_key.as_ref(), &[bump]];
+
+    // Transfer tokens back to funder
+    token::transfer(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            Transfer {
+                from: ctx.accounts.escrow_token_account.to_account_info(),
+                to: ctx.accounts.funder_token_account.to_account_info(),
+                authority: ctx.accounts.escrow_authority.to_account_info(),
+            },
+            &[signer_seeds],
+        ),
+        amount,
+    )?;
+
+    invoice.status = InvoiceStatus::Refunded;
+    invoice.exit(&crate::ID)?;
+
+    commit_accounts(
+        &ctx.accounts.payer,
+        vec![&ctx.accounts.invoice_account.to_account_info()],
+        &ctx.accounts.magic_context,
+        &ctx.accounts.magic_program,
+    )?;
+
+    msg!("Escrow refunded: {} tokens", amount);
     Ok(())
 }
