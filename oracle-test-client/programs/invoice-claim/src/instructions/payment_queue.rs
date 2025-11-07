@@ -15,7 +15,7 @@ pub struct InitPaymentQueue<'info> {
     #[account(
         init,
         payer = authority,
-        space = 8 + PaymentQueue::INIT_SPACE + (1024 * std::mem::size_of::<PendingPayment>()),
+        space = 8 + PaymentQueue::INIT_SPACE,
         seeds = [b"payment_queue", org_config.key().as_ref()],
         bump
     )]
@@ -47,7 +47,7 @@ pub struct AddToPaymentQueue<'info> {
     pub org_config: Account<'info, OrgConfig>,
 
     #[account(
-        seeds = [b"invoice", invoice_account.authority.as_ref()],
+        seeds = [b"invoice", invoice_account.authority.as_ref(), &invoice_account.nonce.to_le_bytes()],
         bump
     )]
     pub invoice_account: Account<'info, InvoiceAccount>,

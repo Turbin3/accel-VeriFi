@@ -1,5 +1,5 @@
 {
-  "address": "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U",
+  "address": "6uW3Hfd7x3qwiYKVxPHKep849FxWhmTRmDD7q73Svhbw",
   "metadata": {
     "name": "invoice_claim",
     "version": "0.1.0",
@@ -57,6 +57,113 @@
           "relations": [
             "org_config"
           ]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "add_to_payment_queue",
+      "discriminator": [
+        215,
+        176,
+        65,
+        168,
+        128,
+        96,
+        161,
+        68
+      ],
+      "accounts": [
+        {
+          "name": "org_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "org_config.authority",
+                "account": "OrgConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "invoice_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  111,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "invoice_account.authority",
+                "account": "InvoiceAccount"
+              },
+              {
+                "kind": "account",
+                "path": "invoice_account.nonce",
+                "account": "InvoiceAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payment_queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  121,
+                  109,
+                  101,
+                  110,
+                  116,
+                  95,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "org_config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -128,6 +235,41 @@
                 "kind": "account",
                 "path": "invoice_account.authority",
                 "account": "InvoiceAccount"
+              },
+              {
+                "kind": "account",
+                "path": "invoice_account.nonce",
+                "account": "InvoiceAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payment_queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  121,
+                  109,
+                  101,
+                  110,
+                  116,
+                  95,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "org_config"
               }
             ]
           }
@@ -165,6 +307,36 @@
         },
         {
           "name": "org_config"
+        },
+        {
+          "name": "payment_queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  121,
+                  109,
+                  101,
+                  110,
+                  116,
+                  95,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "org_config"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -212,6 +384,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "invoice_account.nonce",
+                "account": "InvoiceAccount"
               }
             ]
           }
@@ -260,6 +437,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "invoice_request.nonce",
+                "account": "InvoiceRequest"
               }
             ]
           }
@@ -350,6 +532,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "invoice_account.nonce",
+                "account": "InvoiceAccount"
               }
             ]
           }
@@ -455,38 +642,38 @@
             "program": {
               "kind": "const",
               "value": [
-                185,
+                116,
+                89,
+                58,
+                141,
+                131,
+                42,
+                143,
+                162,
+                67,
                 183,
-                188,
-                21,
-                157,
-                163,
-                170,
-                218,
-                8,
-                222,
-                55,
-                73,
+                145,
+                117,
+                118,
+                148,
+                133,
+                49,
+                232,
+                249,
                 161,
-                41,
-                208,
-                128,
-                6,
-                160,
-                123,
-                147,
-                238,
-                107,
-                22,
-                190,
-                224,
-                96,
+                228,
+                63,
+                136,
+                114,
+                166,
                 209,
-                75,
-                198,
-                48,
-                32,
-                251
+                194,
+                252,
+                91,
+                181,
+                61,
+                225,
+                185
               ]
             }
           }
@@ -597,7 +784,7 @@
         },
         {
           "name": "owner_program",
-          "address": "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U"
+          "address": "8qBD2GgidRyj8nwVPh4wRDKnGT4TAJhCtNnrdzFZCKZz"
         },
         {
           "name": "delegation_program",
@@ -667,6 +854,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "invoice_account.nonce",
+                "account": "InvoiceAccount"
               }
             ]
           }
@@ -723,6 +915,88 @@
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "init_payment_queue",
+      "discriminator": [
+        187,
+        22,
+        4,
+        181,
+        211,
+        82,
+        11,
+        228
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "org_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "org_config.authority",
+                "account": "OrgConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payment_queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  121,
+                  109,
+                  101,
+                  110,
+                  116,
+                  95,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "org_config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -893,6 +1167,11 @@
                 "kind": "account",
                 "path": "invoice_request.authority",
                 "account": "InvoiceRequest"
+              },
+              {
+                "kind": "account",
+                "path": "invoice_request.nonce",
+                "account": "InvoiceRequest"
               }
             ]
           }
@@ -917,6 +1196,11 @@
               {
                 "kind": "account",
                 "path": "invoice_request.authority",
+                "account": "InvoiceRequest"
+              },
+              {
+                "kind": "account",
+                "path": "invoice_request.nonce",
                 "account": "InvoiceRequest"
               }
             ]
@@ -975,6 +1259,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "invoice_account.nonce",
+                "account": "InvoiceAccount"
               }
             ]
           }
@@ -1057,6 +1346,89 @@
       ]
     },
     {
+      "name": "remove_from_payment_queue",
+      "discriminator": [
+        45,
+        14,
+        143,
+        69,
+        92,
+        58,
+        46,
+        153
+      ],
+      "accounts": [
+        {
+          "name": "org_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "org_config.authority",
+                "account": "OrgConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payment_queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  121,
+                  109,
+                  101,
+                  110,
+                  116,
+                  95,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "org_config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "invoice_key",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "request_invoice_audit_vrf",
       "discriminator": [
         84,
@@ -1123,6 +1495,41 @@
                 "kind": "account",
                 "path": "invoice_account.authority",
                 "account": "InvoiceAccount"
+              },
+              {
+                "kind": "account",
+                "path": "invoice_account.nonce",
+                "account": "InvoiceAccount"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payment_queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  121,
+                  109,
+                  101,
+                  110,
+                  116,
+                  95,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "org_config"
               }
             ]
           }
@@ -1186,6 +1593,11 @@
       ],
       "accounts": [
         {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
           "name": "invoice_request",
           "writable": true,
           "pda": {
@@ -1205,14 +1617,13 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "arg",
+                "path": "nonce"
               }
             ]
           }
-        },
-        {
-          "name": "authority",
-          "writable": true,
-          "signer": true
         },
         {
           "name": "system_program",
@@ -1226,6 +1637,10 @@
         },
         {
           "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "nonce",
           "type": "u64"
         }
       ]
@@ -1267,6 +1682,11 @@
               {
                 "kind": "account",
                 "path": "authority"
+              },
+              {
+                "kind": "account",
+                "path": "invoice_account.nonce",
+                "account": "InvoiceAccount"
               }
             ]
           }
@@ -1463,6 +1883,19 @@
       ]
     },
     {
+      "name": "PaymentQueue",
+      "discriminator": [
+        252,
+        158,
+        5,
+        213,
+        84,
+        121,
+        59,
+        80
+      ]
+    },
+    {
       "name": "VendorAccount",
       "discriminator": [
         195,
@@ -1599,6 +2032,10 @@
           {
             "name": "timestamp",
             "type": "i64"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
           }
         ]
       }
@@ -1630,6 +2067,10 @@
           },
           {
             "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "nonce",
             "type": "u64"
           }
         ]
@@ -1717,6 +2158,64 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PaymentQueue",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "org",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_invoices",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "PendingPayment"
+                }
+              }
+            }
+          },
+          {
+            "name": "count",
+            "type": "u64"
+          },
+          {
+            "name": "last_updated",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PendingPayment",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "invoice_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "vendor",
+            "type": "pubkey"
+          },
+          {
+            "name": "due_date",
+            "type": "i64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
           }
         ]
       }

@@ -132,7 +132,7 @@ pub struct RequestInvoiceAuditVrf<'info> {
 
     #[account(
         mut,
-        seeds = [b"invoice", invoice_account.authority.as_ref()],
+        seeds = [b"invoice", invoice_account.authority.as_ref(), &invoice_account.nonce.to_le_bytes()],
         bump
     )]
     pub invoice_account: Account<'info, InvoiceAccount>,

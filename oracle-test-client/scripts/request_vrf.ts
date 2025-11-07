@@ -12,7 +12,7 @@ async function main() {
     program.programId
   );
   const [invoicePda] = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("invoice"), wallet.publicKey.toBuffer()],
+    [Buffer.from("unused-seed")], // placeholder; we'll override via scan below
     program.programId
   );
 
@@ -26,12 +26,27 @@ async function main() {
   const queuePk = new anchor.web3.PublicKey(queueStr);
 
   try {
+    // Find the latest invoice for this authority by scanning program accounts
+    const invoiceDisc = Buffer.from([105, 207, 226, 227, 85, 35, 132, 40]);
+    const accounts = await provider.connection.getProgramAccounts(program.programId);
+    const myInvoices = accounts.filter(({ account }) => {
+      if (account.data.length < 100) return false;
+      const disc = account.data.slice(0, 8);
+      if (!disc.equals(invoiceDisc)) return false;
+      const auth = new anchor.web3.PublicKey(account.data.slice(8, 40));
+      return auth.equals(wallet.publicKey);
+    });
+    if (myInvoices.length === 0) {
+      throw new Error("No invoice accounts found for this authority");
+    }
+    const invPubkey = myInvoices[0].pubkey; // naive pick; improve selection if needed
+
     const tx = await program.methods
       .requestInvoiceAuditVrf(42)
       .accounts({
         payer: wallet.publicKey,
         orgConfig: orgConfigPda,
-        invoiceAccount: invoicePda,
+        invoiceAccount: invPubkey,
         oracleQueue: queuePk,
       })
       .rpc();
@@ -44,4 +59,3 @@ async function main() {
 }
 
 main();
-

@@ -1,20 +1,22 @@
 use anchor_lang::prelude::*;
 use crate::state::*;
+use anchor_lang::prelude::Pubkey;
 
 #[derive(Accounts)]
-#[instruction(ipfs_hash: String)]
+#[instruction(ipfs_hash: String, amount: u64, nonce: u64)]
 pub struct RequestExtraction<'info> {
+    // Put authority first to avoid any ambiguity in account resolution
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
     #[account(
         init,
         payer = authority,
         space = 8 + InvoiceRequest::INIT_SPACE,
-        seeds = [b"request", authority.key().as_ref()],
+        seeds = [b"request", authority.key().as_ref(), &nonce.to_le_bytes()],
         bump
     )]
     pub invoice_request: Account<'info, InvoiceRequest>,
-
-    #[account(mut)]
-    pub authority: Signer<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -22,7 +24,8 @@ pub struct RequestExtraction<'info> {
 pub fn request_invoice_extraction(
     ctx: Context<RequestExtraction>,
     ipfs_hash: String,
-    amount: u64
+    amount: u64,
+    nonce: u64,
 ) -> Result<()> {
     require!(!ipfs_hash.is_empty(), InvoiceError::InvalidIPFSHash);
     require!(amount > 0, InvoiceError::InvalidAmount);
@@ -32,10 +35,30 @@ pub fn request_invoice_extraction(
         ipfs_hash: ipfs_hash.clone(),
         status: RequestStatus::Pending,
         timestamp: Clock::get()?.unix_timestamp,
-        amount
+        amount,
+        nonce,
     });
 
     msg!("Invoice extraction requested for IPFS: {}", ipfs_hash);
+    Ok(())
+}
+
+// Debug helper: log the PDA the program derives for (authority, nonce)
+#[derive(Accounts)]
+pub struct DebugRequestPda<'info> {
+    pub system_program: Program<'info, System>,
+}
+
+pub fn debug_request_pda(
+    _ctx: Context<DebugRequestPda>,
+    authority: Pubkey,
+    nonce: u64,
+) -> Result<()> {
+    let (pda, _bump) = Pubkey::find_program_address(
+        &[b"request", authority.as_ref(), &nonce.to_le_bytes()],
+        &crate::ID,
+    );
+    msg!("DEBUG Request PDA: {} (auth={}, nonce={})", pda, authority, nonce);
     Ok(())
 }
 
@@ -61,7 +84,7 @@ pub struct ProcessResult<'info> {
 
     #[account(
         mut,
-        seeds = [b"request", invoice_request.authority.as_ref()],
+        seeds = [b"request", invoice_request.authority.as_ref(), &invoice_request.nonce.to_le_bytes()],
         bump
     )]
     pub invoice_request: Account<'info, InvoiceRequest>,
@@ -70,7 +93,11 @@ pub struct ProcessResult<'info> {
         init,
         payer = payer,
         space = 8 + InvoiceAccount::INIT_SPACE,
-        seeds = [b"invoice", invoice_request.authority.as_ref()],
+        seeds = [
+            b"invoice",
+            invoice_request.authority.as_ref(),
+            &invoice_request.nonce.to_le_bytes()
+        ],
         bump
     )]
     pub invoice_account: Account<'info, InvoiceAccount>,
@@ -119,6 +146,7 @@ pub fn process_extraction_result(
         status: InvoiceStatus::Validated,
         timestamp: Clock::get()?.unix_timestamp,
         vendor: ctx.accounts.vendor_account.key(),
+        nonce: request.nonce,
     });
 
     request.status = RequestStatus::Completed;
@@ -140,7 +168,7 @@ pub struct AuditDecide<'info> {
 
     #[account(
         mut,
-        seeds = [b"invoice", invoice_account.authority.as_ref()],
+        seeds = [b"invoice", invoice_account.authority.as_ref(), &invoice_account.nonce.to_le_bytes()],
         bump
     )]
     pub invoice_account: Account<'info, InvoiceAccount>,
