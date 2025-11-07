@@ -10,9 +10,10 @@ import {
     Eye,
 } from "lucide-react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import { Buffer } from "buffer";
-import * as borsh from "@coral-xyz/borsh";
+import { Program, AnchorProvider } from "@coral-xyz/anchor";
+import IDL from "../../invoice_claim.json";
 
 const PROGRAM_ID = new PublicKey(
     import.meta.env.VITE_PROGRAM_ID || "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U"
@@ -153,56 +154,37 @@ export function AuditQueue() {
         setProcessing(invoice.pubkey);
 
         try {
-            // Derive org config PDA
-            const [orgConfigPda] = PublicKey.findProgramAddressSync(
-                [Buffer.from("org_config"), wallet.publicKey.toBuffer()],
-                PROGRAM_ID
-            );
-
-            // Derive invoice PDA
-            const [invoicePda] = PublicKey.findProgramAddressSync(
-                [Buffer.from("invoice"), new PublicKey(invoice.authority).toBuffer()],
-                PROGRAM_ID
-            );
-
-            console.log("Org Config PDA:", orgConfigPda.toBase58());
-            console.log("Invoice PDA:", invoicePda.toBase58());
-
-            // Create audit_decide instruction
-            // Instruction discriminator for audit_decide
-            const discriminator = Buffer.from([
-                // You may need to calculate this from your IDL
-                // For now using a placeholder - replace with actual discriminator
-                0, 0, 0, 0, 0, 0, 0, 0,
-            ]);
-
-            // Instruction data: discriminator + approve (1 byte boolean)
-            const data = Buffer.concat([
-                discriminator,
-                Buffer.from([approve ? 1 : 0]),
-            ]);
-
-            const instruction = new TransactionInstruction({
-                keys: [
-                    { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
-                    { pubkey: orgConfigPda, isSigner: false, isWritable: true },
-                    { pubkey: invoicePda, isSigner: false, isWritable: true },
-                ],
-                programId: PROGRAM_ID,
-                data,
+            // Build Anchor program client
+            const provider = new AnchorProvider(connection, wallet as any, {
+                commitment: "confirmed",
             });
+            const program = new Program(IDL as any, provider);
 
-            const transaction = new Transaction().add(instruction);
-            transaction.feePayer = wallet.publicKey;
-            transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+            // Derive required PDAs
+            const reviewer = wallet.publicKey;
+            const [orgConfigPda] = PublicKey.findProgramAddressSync(
+                [Buffer.from("org_config"), reviewer.toBuffer()],
+                PROGRAM_ID
+            );
+            // Use the actual invoice PDA from the row
+            const invoicePda = new PublicKey(invoice.pubkey);
+            const [paymentQueuePda] = PublicKey.findProgramAddressSync(
+                [Buffer.from("payment_queue"), orgConfigPda.toBuffer()],
+                PROGRAM_ID
+            );
 
-            const signed = await wallet.signTransaction(transaction);
-            const signature = await connection.sendRawTransaction(signed.serialize());
+            // Call on-chain method via Anchor (no manual discriminator needed)
+            const txSig = await program.methods
+                .auditDecide(approve)
+                .accounts({
+                    reviewer,
+                    orgConfig: orgConfigPda,
+                    invoiceAccount: invoicePda,
+                    paymentQueue: paymentQueuePda,
+                })
+                .rpc();
 
-            console.log("Transaction sent:", signature);
-
-            await connection.confirmTransaction(signature, "confirmed");
-
+            console.log("AuditDecide tx:", txSig);
             alert(`Invoice ${approve ? "approved" : "rejected"} successfully!`);
 
             // Refresh the list
