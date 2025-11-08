@@ -30,6 +30,7 @@ pub async fn fund_escrow_for_invoice(
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("Funding escrow for invoice: {}", invoice_pda);
 
+    // Using org authority from env to dynamically derive payer ATA
     let org_authority_str = env::var("ORG_AUTHORITY_PUBKEY")?;
     let org_authority = Pubkey::from_str(&org_authority_str)?;
 
@@ -43,16 +44,18 @@ pub async fn fund_escrow_for_invoice(
         program_id,
     );
 
-    let payer_ata = Pubkey::from_str(&env::var("PAYER_TOKEN_ACCOUNT")?)?;
+    // Derive mint from env
     let mint = Pubkey::from_str(&env::var("TOKEN_MINT")?)?;
 
-    // Debug logs for all accounts and mints
+    // Derive payer ATA dynamically from org_authority and mint
+    let payer_ata = get_associated_token_address(&org_authority, &mint);
+
     println!("ORG_AUTHORITY_PUBKEY: {}", org_authority);
     println!("ORG_CONFIG PDA: {}", org_config_pda);
     println!("ESCROW_AUTH PDA: {}", escrow_auth_pda);
     println!("INVOICE PDA: {}", invoice_pda);
     println!("PAYER: {}", keypair.pubkey());
-    println!("PAYER_ATA: {}", payer_ata);
+    println!("Derived PAYER_ATA: {}", payer_ata);
     println!("MINT supplied: {}", mint);
 
     // Fetch and print on-chain org_config.mint
@@ -61,31 +64,43 @@ pub async fn fund_escrow_for_invoice(
     let org_config_mint = Pubkey::new(&org_config_account.data[mint_offset..mint_offset+32]);
     println!("ORG_CONFIG.STORED_MINT: {}", org_config_mint);
 
-    // Print payer ATA mint
-    if let Ok(acc) = rpc_client.get_account(&payer_ata) {
-        let payer_ata_mint = get_token_account_mint(&acc.data);
-        println!("PAYER_ATA.MINT: {}", payer_ata_mint);
+    // Check if payer ATA exists, if not create it
+    if rpc_client.get_account(&payer_ata).is_err() {
+        println!("Creating payer token account: {}", payer_ata);
+
+        let create_payer_ata_ix = spl_associated_token_account::instruction::create_associated_token_account(
+            &keypair.pubkey(),   // payer for account creation fees
+            &org_authority,      // owner of this token account
+            &mint,              // mint
+            &Pubkey::from_str(SPL_TOKEN_PROGRAM_ID)?,
+        );
+
+        let recent_blockhash = rpc_client.get_latest_blockhash()?;
+        let create_payer_tx = Transaction::new_signed_with_payer(
+            &[create_payer_ata_ix],
+            Some(&keypair.pubkey()),
+            &[keypair],
+            recent_blockhash,
+        );
+
+        rpc_client.send_and_confirm_transaction(&create_payer_tx)?;
+        println!("Payer token account created");
     } else {
-        println!("PAYER_ATA does not exist.");
+        // Print payer ATA mint if exists
+        let payer_ata_account = rpc_client.get_account(&payer_ata)?;
+        let payer_ata_mint = get_token_account_mint(&payer_ata_account.data);
+        println!("PAYER_ATA.MINT: {}", payer_ata_mint);
     }
 
     // Derive escrow ATA
     let escrow_ata = get_associated_token_address(&escrow_auth_pda, &mint);
     println!("ESCROW_ATA: {}", escrow_ata);
 
-    // Print escrow ATA mint if exists
-    if let Ok(acc) = rpc_client.get_account(&escrow_ata) {
-        let escrow_ata_mint = get_token_account_mint(&acc.data);
-        println!("ESCROW_ATA.MINT: {}", escrow_ata_mint);
-    } else {
-        println!("ESCROW_ATA does not exist—will create.");
-    }
-
-    // Check if escrow ATA exists, if not, create it first
+    // Check if escrow ATA exists, if not create it
     if rpc_client.get_account(&escrow_ata).is_err() {
         println!("Creating escrow token account: {}", escrow_ata);
 
-        let create_ata_ix = spl_associated_token_account::instruction::create_associated_token_account(
+        let create_escrow_ata_ix = spl_associated_token_account::instruction::create_associated_token_account(
             &keypair.pubkey(),  // payer
             &escrow_auth_pda,   // owner
             &mint,              // mint
@@ -93,15 +108,19 @@ pub async fn fund_escrow_for_invoice(
         );
 
         let recent_blockhash = rpc_client.get_latest_blockhash()?;
-        let create_tx = Transaction::new_signed_with_payer(
-            &[create_ata_ix],
+        let create_escrow_tx = Transaction::new_signed_with_payer(
+            &[create_escrow_ata_ix],
             Some(&keypair.pubkey()),
             &[keypair],
             recent_blockhash,
         );
 
-        rpc_client.send_and_confirm_transaction(&create_tx)?;
+        rpc_client.send_and_confirm_transaction(&create_escrow_tx)?;
         println!("Escrow token account created");
+    } else {
+        let escrow_ata_account = rpc_client.get_account(&escrow_ata)?;
+        let escrow_ata_mint = get_token_account_mint(&escrow_ata_account.data);
+        println!("ESCROW_ATA.MINT: {}", escrow_ata_mint);
     }
 
     let token_program = Pubkey::from_str(SPL_TOKEN_PROGRAM_ID)?;

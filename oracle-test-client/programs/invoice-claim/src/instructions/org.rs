@@ -95,3 +95,24 @@ pub fn update_org_config(
 
     Ok(())
 }
+
+#[derive(Accounts)]
+pub struct CloseOrg<'info> {
+    #[account(
+        mut,
+        seeds = [b"org_config", org_config.authority.as_ref()],
+        bump = org_config.bump,
+        has_one = authority @ InvoiceError::Unauthorized,
+        close = authority  // Closes account and sends rent to authority
+    )]
+    pub org_config: Account<'info, OrgConfig>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+}
+
+pub fn close_org(_ctx: Context<CloseOrg>) -> Result<()> {
+    msg!("Organization config closed successfully");
+    Ok(())
+}
+

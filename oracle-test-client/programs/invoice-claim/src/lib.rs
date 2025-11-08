@@ -2,7 +2,7 @@
 #![allow(deprecated)]
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::{anchor::{commit,delegate,ephemeral}, cpi::DelegateConfig};
-declare_id!("8AHApdLz2DieivEqjbnF2UKtmGQQwFybaPRs1sxRYqjy");
+declare_id!("7DCAzfvmrbjDuoQMSdamKwguDTQ48QAuedDHpWPynJvx");
 
 pub const CALLBACK_VRF_DISCRIMINATOR: [u8; 7] = *b"clbrand"; 
 mod state;
@@ -83,6 +83,10 @@ pub mod invoice_claim {
     // Update Org Config
     pub fn update_org_config(ctx: Context<UpdateOrgConfig>, update_args: UpdateOrgConfigArgs) -> Result<()> {
         instructions::org::update_org_config(ctx, update_args)
+    }
+
+    pub fn close_org(ctx: Context<CloseOrg>) -> Result<()> {
+        instructions::org::close_org(ctx)
     }
 
     // Escrow MVP

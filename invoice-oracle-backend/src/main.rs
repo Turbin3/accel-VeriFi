@@ -115,7 +115,7 @@ pub enum RequestStatus {
     Completed,
 }
 
-const PROGRAM_ID: &str = "8AHApdLz2DieivEqjbnF2UKtmGQQwFybaPRs1sxRYqjy";
+const PROGRAM_ID: &str = "7DCAzfvmrbjDuoQMSdamKwguDTQ48QAuedDHpWPynJvx";
 const RPC_URL: &str = "https://api.devnet.solana.com";
 
 #[tokio::main]
@@ -123,7 +123,7 @@ async fn main() {
     println!("Invoice Oracle Backend Starting...");
     dotenv().ok();
 
-    let keypair = read_keypair_file("oracle-keypair.json")
+    let keypair = read_keypair_file("phantom-keypair.json")
         .expect("Failed to read keypair file");
 
     println!("Oracle wallet: {}", keypair.pubkey());
@@ -270,7 +270,7 @@ async fn extract_and_submit(
             ocr_filetype
         );
 
-        println!("   Trying OCR via gateway: {}", gw);
+        println!("Trying OCR via gateway: {}", gw);
         tried.push(gw.to_string());
 
         match client.get(&ocr_url).send().await {
@@ -283,7 +283,7 @@ async fn extract_and_submit(
 
                         if !errored {
                             json = v;
-                            println!("   OCR succeeded via {}", gw);
+                            println!("OCR succeeded via {}", gw);
                             break;
                         } else {
                             last_err = Some(format!("OCR error via {}: {:?}", gw, v.get("ErrorMessage")));

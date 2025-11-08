@@ -15,7 +15,6 @@ pub struct FundEscrow<'info> {
         mut,
         seeds = [b"invoice", authority.key().as_ref(), &invoice_account.nonce.to_le_bytes()],
         bump,
-        has_one = authority @ InvoiceError::Unauthorized
     )]
     pub invoice_account: Account<'info, InvoiceAccount>,
 

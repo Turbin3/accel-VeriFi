@@ -1,5 +1,5 @@
 {
-  "address": "8AHApdLz2DieivEqjbnF2UKtmGQQwFybaPRs1sxRYqjy",
+  "address": "7DCAzfvmrbjDuoQMSdamKwguDTQ48QAuedDHpWPynJvx",
   "metadata": {
     "name": "invoice_claim",
     "version": "0.1.0",
@@ -405,6 +405,58 @@
       "args": []
     },
     {
+      "name": "close_org",
+      "discriminator": [
+        195,
+        139,
+        244,
+        208,
+        62,
+        30,
+        143,
+        152
+      ],
+      "accounts": [
+        {
+          "name": "org_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "org_config.authority",
+                "account": "OrgConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "org_config"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "close_request",
       "discriminator": [
         170,
@@ -726,38 +778,38 @@
             "program": {
               "kind": "const",
               "value": [
-                106,
-                98,
-                81,
-                136,
-                76,
-                237,
-                240,
-                180,
-                206,
-                172,
-                214,
-                76,
-                36,
-                120,
-                141,
-                9,
-                207,
-                35,
+                92,
+                69,
+                185,
+                77,
+                232,
+                124,
+                202,
+                32,
+                162,
                 167,
-                182,
-                208,
-                210,
-                196,
-                126,
-                255,
-                218,
-                165,
-                166,
+                249,
                 106,
-                96,
-                196,
-                180
+                64,
+                44,
+                211,
+                119,
+                21,
+                89,
+                140,
+                178,
+                211,
+                9,
+                162,
+                147,
+                254,
+                67,
+                47,
+                104,
+                187,
+                76,
+                190,
+                165
               ]
             }
           }
@@ -873,7 +925,7 @@
         },
         {
           "name": "owner_program",
-          "address": "8AHApdLz2DieivEqjbnF2UKtmGQQwFybaPRs1sxRYqjy"
+          "address": "7DCAzfvmrbjDuoQMSdamKwguDTQ48QAuedDHpWPynJvx"
         },
         {
           "name": "delegation_program",
@@ -985,10 +1037,7 @@
           "signer": true
         },
         {
-          "name": "authority",
-          "relations": [
-            "invoice_account"
-          ]
+          "name": "authority"
         },
         {
           "name": "payer_ata",

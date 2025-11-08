@@ -6,6 +6,7 @@ import { SetupPage } from "@/components/Dashboard/SetupPage";
 import { VendorManagement } from "@/components/Dashboard/VendorManagement";
 import { InvoiceManagement } from "@/components/Dashboard/InvoiceManagement";
 import { AuditQueue } from "@/components/Dashboard/AuditQueue";
+import { PaymentQueue } from "@/components/Dashboard/PaymentQueue";
 import { useSolanaWallet } from "./WalletProvider";
 import { UploadInvoice } from "./components/Dashboard/UploadInvoice";
 
@@ -14,7 +15,13 @@ export default function App() {
   const [showSetup, setShowSetup] = useState(false);
   const [orgCreated, setOrgCreated] = useState(false);
   const [currentPage, setCurrentPage] = useState<
-      "home" | "vendor" | "invoices" | "audit" | "dashboard" | "upload"
+      | "home"
+      | "vendor"
+      | "invoices"
+      | "audit"
+      | "dashboard"
+      | "upload"
+      | "paymentqueue"
   >("home");
 
   const handleStartNow = () => {
@@ -78,6 +85,12 @@ export default function App() {
                     Audit Queue
                   </button>
                   <button
+                      onClick={() => setCurrentPage("paymentqueue")}
+                      className="text-slate-300 hover:text-emerald-400 transition-colors font-medium"
+                  >
+                    Payment Queue
+                  </button>
+                  <button
                       onClick={() => setCurrentPage("dashboard")}
                       className="text-slate-300 hover:text-emerald-400 transition-colors font-medium"
                   >
@@ -125,6 +138,8 @@ export default function App() {
                 <VendorManagement />
             ) : currentPage === "invoices" ? (
                 <InvoiceManagement />
+            ) : currentPage === "paymentqueue" ? (
+                <PaymentQueue />
             ) : currentPage === "dashboard" ? (
                 <div className="px-6 py-8">
                   <AdminDashboard />
