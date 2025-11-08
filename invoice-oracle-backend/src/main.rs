@@ -1,3 +1,6 @@
+mod escrow;
+mod payment_queue;
+
 use std::env;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{read_keypair_file, Keypair, Signer};
@@ -11,6 +14,8 @@ use std::time::Duration;
 use dotenvy::dotenv;
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
+use crate::escrow::fund_escrow_for_invoice;
+use crate::payment_queue::add_to_payment_queue;
 
 #[derive(Clone, Debug)]
 pub struct InvoiceRequest {
@@ -241,7 +246,7 @@ async fn extract_and_submit(
         "https://emerald-abundant-baboon-978.mypinata.cloud/ipfs,https://ipfs.io/ipfs,https://gateway.pinata.cloud/ipfs".to_string()
     );
 
-    println!("\n📞 Calling OCR API...");
+    println!("\nCalling OCR API...");
     let client = reqwest::Client::new();
     let mut json: serde_json::Value = serde_json::json!({});
     let mut last_err: Option<String> = None;
@@ -265,7 +270,7 @@ async fn extract_and_submit(
             ocr_filetype
         );
 
-        println!("   🌐 Trying OCR via gateway: {}", gw);
+        println!("   Trying OCR via gateway: {}", gw);
         tried.push(gw.to_string());
 
         match client.get(&ocr_url).send().await {
@@ -278,7 +283,7 @@ async fn extract_and_submit(
 
                         if !errored {
                             json = v;
-                            println!("   ✅ OCR succeeded via {}", gw);
+                            println!("   OCR succeeded via {}", gw);
                             break;
                         } else {
                             last_err = Some(format!("OCR error via {}: {:?}", gw, v.get("ErrorMessage")));
@@ -310,22 +315,22 @@ async fn extract_and_submit(
     let ocr_text = json["ParsedResults"][0]["ParsedText"]
         .as_str()
         .ok_or("Failed to extract OCR text")?;
-    println!("📝 OCR Text extracted");
+    println!("OCR Text extracted");
 
     let (vendor, amount, mut due_date) = parse_invoice(ocr_text);
-    println!("🏪 Vendor: {}", vendor);
+    println!("Vendor: {}", vendor);
 
     let decimals: u8 = env::var("MINT_DECIMALS")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(6);
-    log_amount("💰 Parsed amount", amount, decimals);
+    log_amount("Parsed amount", amount, decimals);
 
     if amount == 0 {
-        eprintln!("⚠️ Warning: parsed amount_base_units is 0; check OCR and parsing rules");
+        eprintln!("Warning: parsed amount_base_units is 0; check OCR and parsing rules");
     }
 
-    println!("📅 Due Date: {}", due_date);
+    println!("Due Date: {}", due_date);
 
     // Ensure due date is in the future
     let now = chrono::Utc::now().timestamp();
@@ -337,14 +342,14 @@ async fn extract_and_submit(
     if short_due_seconds > 0 {
         let override_due = now + short_due_seconds;
         println!(
-            "⏰ SHORT_DUE_SECONDS set ({}s); overriding due date to {}",
+            "SHORT_DUE_SECONDS set ({}s); overriding due date to {}",
             short_due_seconds, override_due
         );
         due_date = override_due;
     } else if due_date <= now {
         let fallback = now + 30 * 24 * 60 * 60;
         println!(
-            "⏰ Due date not found or in past; using fallback {} (30 days ahead)",
+            "Due date not found or in past; using fallback {} (30 days ahead)",
             fallback
         );
         due_date = fallback;
@@ -398,7 +403,7 @@ async fn extract_and_submit(
         data,
     };
 
-    println!("\n📤 Submitting to Solana...");
+    println!("\nSubmitting to Solana...");
     let recent_blockhash = rpc_client.get_latest_blockhash()?;
     let tx = Transaction::new_signed_with_payer(
         &[ix],
@@ -409,11 +414,11 @@ async fn extract_and_submit(
 
     let _signature = match rpc_client.send_and_confirm_transaction(&tx) {
         Ok(sig) => {
-            println!("✅ Transaction successful: {}", sig);
+            println!("Transaction successful: {}", sig);
             sig
         }
         Err(e) => {
-            eprintln!("❌ Transaction failed: {}", e);
+            eprintln!("Transaction failed: {}", e);
 
             if let Ok(sim) = rpc_client.simulate_transaction(&tx) {
                 eprintln!("\n===== TRANSACTION LOGS =====");
@@ -432,23 +437,56 @@ async fn extract_and_submit(
     // Post-submit verification
     if let Ok(acc) = rpc_client.get_account(&invoice_pda) {
         if let Ok(inv) = InvoiceAccountLite::from_account_data(&acc.data) {
-            log_amount("✅ On-chain invoice.amount", inv.amount, decimals);
+            log_amount("On-chain invoice.amount", inv.amount, decimals);
         } else {
-            eprintln!("⚠️ Could not decode on-chain InvoiceAccount for verification");
+            eprintln!("Could not decode on-chain InvoiceAccount for verification");
         }
     } else {
-        eprintln!("⚠️ Could not fetch on-chain InvoiceAccount for verification");
+        eprintln!("Could not fetch on-chain InvoiceAccount for verification");
     }
 
     // Auto-request VRF if enabled
     if env::var("AUTO_REQUEST_VRF").unwrap_or_default() == "1" {
         if let Err(e) = request_vrf_for_invoice(rpc_client, keypair, program_id, &invoice_pda).await {
-            eprintln!("❌ VRF request failed: {}", e);
+            eprintln!("VRF request failed: {}", e);
+        }
+    }
+
+    // Auto-fund escrow if enabled
+    if env::var("AUTO_FUND_ESCROW").unwrap_or_default() == "1" {
+        println!("\nAuto-funding escrow...");
+        match fund_escrow_for_invoice(
+            rpc_client,
+            keypair,
+            program_id,
+            &invoice_pda,
+            &request.authority,
+            request.nonce
+        ).await {
+            Ok(_) => {
+                println!("Escrow funded successfully!");
+
+                println!("\nAdding to payment queue...");
+                if let Err(e) = add_to_payment_queue(
+                    rpc_client,
+                    keypair,
+                    program_id,
+                    &invoice_pda,
+                    &request.authority,
+                    request.nonce
+                ).await {
+                    eprintln!("Failed to add to payment queue: {}", e);
+                }
+            }
+            Err(e) => {
+                eprintln!("Escrow funding failed: {}", e);
+            }
         }
     }
 
     Ok(())
 }
+
 
 fn parse_invoice(text: &str) -> (String, u64, i64) {
     println!("\n===== PARSING INVOICE DATA =====");
