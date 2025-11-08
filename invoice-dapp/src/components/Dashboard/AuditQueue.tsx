@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
     Loader,
-    FileText,
     AlertCircle,
     CheckCircle,
     XCircle,
@@ -12,7 +11,6 @@ import {
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { Buffer } from "buffer";
-import * as borsh from "@coral-xyz/borsh";
 
 const PROGRAM_ID = new PublicKey(
     import.meta.env.VITE_PROGRAM_ID || "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U"
@@ -120,7 +118,6 @@ export function AuditQueue() {
                     }
                 } catch (err) {
                     console.error("Error processing invoice account:", err);
-                    continue;
                 }
             }
 
