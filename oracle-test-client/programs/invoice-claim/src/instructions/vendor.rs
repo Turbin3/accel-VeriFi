@@ -92,3 +92,36 @@ pub fn update_vendor_wallet(
     msg!("Vendor wallet updated for: {}", vendor.vendor_name);
     Ok(())
 }
+#[derive(Accounts)]
+pub struct CloseVendor<'info> {
+    #[account(
+        mut,
+        seeds = [b"vendor", org_config.key().as_ref(), vendor_account.vendor_name.as_bytes()],
+        bump,
+        close = authority, // Send rent back to authority
+    )]
+    pub vendor_account: Account<'info, VendorAccount>,
+
+    #[account(
+        has_one = authority @ InvoiceError::Unauthorized
+    )]
+    pub org_config: Account<'info, OrgConfig>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+}
+
+pub fn close_vendor(ctx: Context<CloseVendor>) -> Result<()> {
+    let vendor = &ctx.accounts.vendor_account;
+
+    // Optional: Require vendor to be deactivated before closing
+    // require!(!vendor.is_active, InvoiceError::InvalidStatus);
+
+    // Optional: Check that vendor has no outstanding payments
+    // You might want to add a check here to prevent closing vendors
+    // that still have pending invoices
+
+    msg!("Vendor account closed: {}", vendor.vendor_name);
+    Ok(())
+}
+

@@ -2,7 +2,7 @@
 #![allow(deprecated)]
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::{anchor::{commit,delegate,ephemeral}, cpi::DelegateConfig};
-declare_id!("6uW3Hfd7x3qwiYKVxPHKep849FxWhmTRmDD7q73Svhbw");
+declare_id!("8AHApdLz2DieivEqjbnF2UKtmGQQwFybaPRs1sxRYqjy");
 
 pub const CALLBACK_VRF_DISCRIMINATOR: [u8; 7] = *b"clbrand"; 
 mod state;
@@ -109,6 +109,10 @@ pub mod invoice_claim {
 
     pub fn activate_vendor(ctx: Context<ManageVendor>) -> Result<()> {
         instructions::vendor::activate_vendor(ctx)
+    }
+
+    pub fn close_vendor(ctx: Context<CloseVendor>) -> Result<()> {
+        instructions::vendor::close_vendor(ctx)
     }
 
     pub fn update_vendor_wallet(ctx: Context<ManageVendor>, new_wallet: Pubkey) -> Result<()> {

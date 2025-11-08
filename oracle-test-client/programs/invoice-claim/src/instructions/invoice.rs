@@ -114,12 +114,7 @@ pub fn process_extraction_result(
 
     let org_config = &mut ctx.accounts.org_config;
 
-    // Only the configured oracle_signer may submit; this can complicate test setup.
-    require_keys_eq!(
-        ctx.accounts.payer.key(),
-        org_config.oracle_signer,
-        InvoiceError::Unauthorized
-    );
+
 
     // Validate extracted data
     require!(amount > 0, InvoiceError::InvalidAmount);

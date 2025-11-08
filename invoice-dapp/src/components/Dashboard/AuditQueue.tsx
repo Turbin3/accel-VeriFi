@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
     Loader,
-    FileText,
     AlertCircle,
     CheckCircle,
     XCircle,
@@ -121,7 +120,6 @@ export function AuditQueue() {
                     }
                 } catch (err) {
                     console.error("Error processing invoice account:", err);
-                    continue;
                 }
             }
 

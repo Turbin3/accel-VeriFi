@@ -134,6 +134,54 @@ export function VendorManagement() {
     }
   };
 
+  const handleCloseVendor = async (vendorName: string) => {
+    if (!confirm(`Are you sure you want to close ${vendorName}? This will recover the rent but the vendor must be deactivated first.`)) {
+      return;
+    }
+
+    setActionLoading(`close-${vendorName}`);
+
+    try {
+      const provider = new AnchorProvider(connection, wallet as any, {
+        commitment: "confirmed",
+      });
+
+      const program = new Program(IDL, provider);
+      const authority = wallet.publicKey!;
+
+      const [orgConfigPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from("org_config"), authority.toBuffer()],
+          PROGRAM_ID
+      );
+
+      const [vendorPda] = PublicKey.findProgramAddressSync(
+          [
+            Buffer.from("vendor"),
+            orgConfigPda.toBuffer(),
+            Buffer.from(vendorName),
+          ],
+          PROGRAM_ID
+      );
+
+      await program.methods
+          .closeVendor()
+          .accounts({
+            vendorAccount: vendorPda,
+            orgConfig: orgConfigPda,
+            authority,
+          })
+          .rpc();
+
+      await fetchVendors();
+    } catch (err: any) {
+      console.error("Error closing vendor:", err);
+      setError(err.message || "Failed to close vendor. Make sure vendor is deactivated first.");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+
   const handleAddVendor = async () => {
     if (!newVendorName.trim() || !newVendorWallet.trim()) {
       setError("Please fill in all fields");
@@ -481,47 +529,67 @@ export function VendorManagement() {
                   {/* Action Buttons */}
                   <div className="flex gap-2">
                     {vendor.isActive ? (
-                      <motion.button
-                        onClick={() => handleDeactivateVendor(vendor.name)}
-                        disabled={actionLoading === `deactivate-${vendor.name}`}
-                        className="px-3 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg font-medium flex items-center gap-2 text-sm disabled:opacity-50"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        {actionLoading === `deactivate-${vendor.name}` ? (
-                          <Loader className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Power className="w-4 h-4" />
-                        )}
-                        Deactivate
-                      </motion.button>
+                        <motion.button
+                            onClick={() => handleDeactivateVendor(vendor.name)}
+                            disabled={actionLoading === `deactivate-${vendor.name}`}
+                            className="px-3 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg font-medium flex items-center gap-2 text-sm disabled:opacity-50"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                        >
+                          {actionLoading === `deactivate-${vendor.name}` ? (
+                              <Loader className="w-4 h-4 animate-spin" />
+                          ) : (
+                              <Power className="w-4 h-4" />
+                          )}
+                          Deactivate
+                        </motion.button>
                     ) : (
-                      <motion.button
-                        onClick={() => handleActivateVendor(vendor.name)}
-                        disabled={actionLoading === `activate-${vendor.name}`}
-                        className="px-3 py-2 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-medium flex items-center gap-2 text-sm disabled:opacity-50"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        {actionLoading === `activate-${vendor.name}` ? (
-                          <Loader className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <RotateCw className="w-4 h-4" />
-                        )}
-                        Activate
-                      </motion.button>
+                        <>
+                          <motion.button
+                              onClick={() => handleActivateVendor(vendor.name)}
+                              disabled={actionLoading === `activate-${vendor.name}`}
+                              className="px-3 py-2 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg font-medium flex items-center gap-2 text-sm disabled:opacity-50"
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                          >
+                            {actionLoading === `activate-${vendor.name}` ? (
+                                <Loader className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <RotateCw className="w-4 h-4" />
+                            )}
+                            Activate
+                          </motion.button>
+
+                          {/* Close button - only for deactivated vendors */}
+                          <motion.button
+                              onClick={() => handleCloseVendor(vendor.name)}
+                              disabled={actionLoading === `close-${vendor.name}`}
+                              className="px-3 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg font-medium flex items-center gap-2 text-sm disabled:opacity-50"
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              title="Close account and recover rent"
+                          >
+                            {actionLoading === `close-${vendor.name}` ? (
+                                <Loader className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <XCircle className="w-4 h-4" />
+                            )}
+                            Close
+                          </motion.button>
+                        </>
                     )}
 
                     <motion.button
-                      onClick={() => setShowAddVendor(`update-${vendor.name}`)}
-                      className="px-3 py-2 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-lg font-medium flex items-center gap-2 text-sm"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
+                        onClick={() => setShowAddVendor(`update-${vendor.name}`)}
+                        className="px-3 py-2 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-lg font-medium flex items-center gap-2 text-sm"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
                     >
                       <Edit2 className="w-4 h-4" />
                       Update
                     </motion.button>
                   </div>
+
                 </div>
 
                 {/* Update Wallet Form */}

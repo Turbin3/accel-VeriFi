@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-invoice_claim = "6uW3Hfd7x3qwiYKVxPHKep849FxWhmTRmDD7q73Svhbw"
+invoice_claim = "8AHApdLz2DieivEqjbnF2UKtmGQQwFybaPRs1sxRYqjy"
 
 [registry]
 url = "https://api.apr.dev"
@@ -18,12 +18,12 @@ wallet = "~/.config/solana/id.json"
 [scripts]
 bootstrap = "npx ts-node -P ./tsconfig.json scripts/bootstrap.ts"
 debug-request-pda = "npx ts-node -P ./tsconfig.json scripts/debug_request_pda.ts"
+init-payment-queue = "npx ts-node -P ./tsconfig.json scripts/init_payment_queue.ts"
 request-vrf = "npx ts-node -P ./tsconfig.json scripts/request_vrf.ts"
 submit = "npx ts-node -P ./tsconfig.json scripts/submit_request.ts"
-init-payment-queue = "npx ts-node -P ./tsconfig.json scripts/init_payment_queue.ts"
-view-invoices = "npx ts-node -P ./tsconfig.json scripts/view_invoices.ts"
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
 test-invoice = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/invoice-flow-test.ts"
 test-invoice-e2e = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/invoice-e2e-live-vrf.ts"
 test-org = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/org-test.ts"
 test-vendor = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/vendor-test.ts"
+view-invoices = "npx ts-node -P ./tsconfig.json scripts/view_invoices.ts"
