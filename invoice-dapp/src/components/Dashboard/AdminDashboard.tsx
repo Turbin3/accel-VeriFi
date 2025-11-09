@@ -20,15 +20,18 @@ import {
   Loader,
   FileText,
   DollarSign,
+  Trash2,
 } from "lucide-react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { useEffect, useState } from "react";
 import { Buffer } from "buffer";
+import { Program, AnchorProvider } from "@coral-xyz/anchor";
+import IDL from "../../invoice_claim.json";
 
 const PROGRAM_ID = new PublicKey(import.meta.env.VITE_PROGRAM_ID);
 const PINATA_GATEWAY =
-  "https://emerald-abundant-baboon-978.mypinata.cloud/ipfs";
+    "https://emerald-abundant-baboon-978.mypinata.cloud/ipfs";
 
 interface Invoice {
   authority: string;
@@ -76,12 +79,12 @@ const StatusBadge = ({ status }: { status: string }) => {
   const Icon = config.icon;
 
   return (
-    <div
-      className={`${config.bg} ${config.text} px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 w-fit`}
-    >
-      <Icon size={14} />
-      {status}
-    </div>
+      <div
+          className={`${config.bg} ${config.text} px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 w-fit`}
+      >
+        <Icon size={14} />
+        {status}
+      </div>
   );
 };
 
@@ -92,6 +95,7 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [closingOrg, setClosingOrg] = useState(false);
 
   useEffect(() => {
     if (wallet.publicKey) {
@@ -124,13 +128,13 @@ export function AdminDashboard() {
 
           // authority: Pubkey (32 bytes)
           const authority_pubkey = new PublicKey(
-            account.data.slice(offset, offset + 32)
+              account.data.slice(offset, offset + 32)
           );
           offset += 32;
 
           // vendor: Pubkey (32 bytes)
           const vendor_pubkey = new PublicKey(
-            account.data.slice(offset, offset + 32)
+              account.data.slice(offset, offset + 32)
           );
           offset += 32;
 
@@ -141,8 +145,8 @@ export function AdminDashboard() {
 
           if (offset + vendorNameLen > account.data.length) continue;
           const vendor_name = account.data
-            .slice(offset, offset + vendorNameLen)
-            .toString();
+              .slice(offset, offset + vendorNameLen)
+              .toString();
           offset += vendorNameLen;
 
           // amount: u64 (8 bytes)
@@ -162,8 +166,8 @@ export function AdminDashboard() {
 
           if (offset + ipfsHashLen > account.data.length) continue;
           const ipfs_hash = account.data
-            .slice(offset, offset + ipfsHashLen)
-            .toString();
+              .slice(offset, offset + ipfsHashLen)
+              .toString();
           offset += ipfsHashLen;
 
           // status: Enum (1 byte)
@@ -221,6 +225,74 @@ export function AdminDashboard() {
     }
   };
 
+  const handleCloseOrg = async () => {
+    if (!wallet.publicKey || !wallet.signTransaction) {
+      alert("Please connect your wallet");
+      return;
+    }
+
+    const confirmed = window.confirm(
+        "⚠️ Are you sure you want to close this organization?\n\n" +
+        "This will:\n" +
+        "- Permanently delete the org config account\n" +
+        "- Reclaim the rent SOL to your wallet\n" +
+        "- This action CANNOT be undone\n\n" +
+        "Only proceed if you have no active invoices or want to start fresh."
+    );
+
+    if (!confirmed) return;
+
+    setClosingOrg(true);
+
+    try {
+      // Create provider
+      const provider = new AnchorProvider(connection, wallet as any, {
+        commitment: "confirmed",
+      });
+
+      // Create program instance
+      const program = new Program(IDL, provider);
+
+      const authority = wallet.publicKey;
+
+      // Derive org config PDA
+      const [orgConfigPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from("org_config"), authority.toBuffer()],
+          PROGRAM_ID
+      );
+
+      console.log("Closing org config PDA:", orgConfigPda.toBase58());
+
+      // Call closeOrg
+      const tx = await program.methods
+          .closeOrg()
+          .accounts({
+            orgConfig: orgConfigPda,
+            authority,
+          })
+          .rpc();
+
+      console.log("✅ Organization closed successfully! TX:", tx);
+
+      alert(
+          `✅ Organization closed successfully!\n\n` +
+          `Transaction: ${tx}\n\n` +
+          `Rent has been reclaimed to your wallet.`
+      );
+
+      // Refresh the page or redirect
+      window.location.reload();
+    } catch (err: any) {
+      console.error("Error closing organization:", err);
+      if (err.logs) {
+        console.error("Program logs:", err.logs);
+      }
+      alert(`Failed to close organization: ${err.message}`);
+    } finally {
+      setClosingOrg(false);
+    }
+  };
+
   const totalAmount = invoices.reduce((sum, inv) => sum + inv.amount, 0);
   const paidCount = statusCounts["Paid"] || 0;
 
@@ -239,180 +311,207 @@ export function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader className="w-8 h-8 text-emerald-400 animate-spin" />
-      </div>
+        <div className="flex items-center justify-center py-16">
+          <Loader className="w-8 h-8 text-emerald-400 animate-spin" />
+        </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-6 text-center">
-        <p className="text-red-400">{error}</p>
-      </div>
+        <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-6 text-center">
+          <p className="text-red-400">{error}</p>
+        </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-6 hover:border-slate-600 transition-all">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm font-medium">
-                Total Invoices
-              </p>
-              <p className="text-4xl font-bold text-white mt-2">
-                {invoices.length}
-              </p>
+      <div className="space-y-8">
+        {/* Header with Close Org Button */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-white">Organization Dashboard</h2>
+            <p className="text-slate-400 text-sm mt-1">
+              Manage your invoices and organization settings
+            </p>
+          </div>
+          <button
+              onClick={handleCloseOrg}
+              disabled={closingOrg}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium flex items-center gap-2 transition-all"
+          >
+            {closingOrg ? (
+                <>
+                  <Loader className="w-4 h-4 animate-spin" />
+                  Closing...
+                </>
+            ) : (
+                <>
+                  <Trash2 className="w-4 h-4" />
+                  Close Organization
+                </>
+            )}
+          </button>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-6 hover:border-slate-600 transition-all">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-slate-400 text-sm font-medium">
+                  Total Invoices
+                </p>
+                <p className="text-4xl font-bold text-white mt-2">
+                  {invoices.length}
+                </p>
+              </div>
+              <FileText className="w-12 h-12 text-emerald-400/30" />
             </div>
-            <FileText className="w-12 h-12 text-emerald-400/30" />
           </div>
-        </div>
 
-        <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-6 hover:border-slate-600 transition-all">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm font-medium">Total Amount</p>
-              <p className="text-4xl font-bold text-white mt-2">
-                ${totalAmount.toFixed(2)}
-              </p>
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-6 hover:border-slate-600 transition-all">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-slate-400 text-sm font-medium">Total Amount</p>
+                <p className="text-4xl font-bold text-white mt-2">
+                  ${totalAmount.toFixed(2)}
+                </p>
+              </div>
+              <DollarSign className="w-12 h-12 text-blue-400/30" />
             </div>
-            <DollarSign className="w-12 h-12 text-blue-400/30" />
           </div>
-        </div>
 
-        <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-6 hover:border-slate-600 transition-all">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm font-medium">
-                Paid Invoices
-              </p>
-              <p className="text-4xl font-bold text-white mt-2">{paidCount}</p>
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-6 hover:border-slate-600 transition-all">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-slate-400 text-sm font-medium">
+                  Paid Invoices
+                </p>
+                <p className="text-4xl font-bold text-white mt-2">{paidCount}</p>
+              </div>
+              <CheckCircle2 className="w-12 h-12 text-green-400/30" />
             </div>
-            <CheckCircle2 className="w-12 h-12 text-green-400/30" />
           </div>
         </div>
-      </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-6">
-          <h3 className="text-lg font-bold text-white mb-4">Invoice Trends</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-              <XAxis dataKey="name" stroke="#94a3b8" />
-              <YAxis stroke="#94a3b8" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#1e293b",
-                  border: "1px solid #475569",
-                }}
-              />
-              <Legend />
-              <Bar dataKey="invoices" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-              <Bar dataKey="paid" fill="#22c55e" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-6">
-          <h3 className="text-lg font-bold text-white mb-4">
-            Status Distribution
-          </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={statusData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={100}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {statusData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Invoices Table */}
-      <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl overflow-hidden">
-        <div className="p-6 border-b border-slate-700">
-          <h3 className="text-lg font-bold text-white">All Invoices</h3>
-        </div>
-        {invoices.length === 0 ? (
-          <div className="p-12 text-center text-slate-400">
-            <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No invoices found</p>
+        {/* Charts Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-6">
+            <h3 className="text-lg font-bold text-white mb-4">Invoice Trends</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                <XAxis dataKey="name" stroke="#94a3b8" />
+                <YAxis stroke="#94a3b8" />
+                <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#1e293b",
+                      border: "1px solid #475569",
+                    }}
+                />
+                <Legend />
+                <Bar dataKey="invoices" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="paid" fill="#22c55e" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-900 border-b border-slate-700">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">
-                    Vendor
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">
-                    Amount
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">
-                    Due Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700">
-                {invoices.map((invoice, idx) => (
-                  <tr
-                    key={idx}
-                    className="hover:bg-slate-750 transition-colors"
-                  >
-                    <td className="px-6 py-4 text-sm font-medium text-white">
-                      <div>
-                        <p>{invoice.vendorName}</p>
-                        <p className="text-xs text-slate-400">
-                          {invoice.vendor.slice(0, 8)}...
-                        </p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-300">
-                      ${invoice.amount.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={invoice.status} />
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-400">
-                      {new Date(invoice.dueDate * 1000).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <button
-                        onClick={() => handleViewInvoice(invoice.ipfsHash)}
-                        className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors"
-                      >
-                        View
-                      </button>
-                    </td>
+
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl p-6">
+            <h3 className="text-lg font-bold text-white mb-4">
+              Status Distribution
+            </h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                    data={statusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="value"
+                >
+                  {statusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Invoices Table */}
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl overflow-hidden">
+          <div className="p-6 border-b border-slate-700">
+            <h3 className="text-lg font-bold text-white">All Invoices</h3>
+          </div>
+          {invoices.length === 0 ? (
+              <div className="p-12 text-center text-slate-400">
+                <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No invoices found</p>
+              </div>
+          ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-900 border-b border-slate-700">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">
+                      Vendor
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">
+                      Amount
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">
+                      Due Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  </thead>
+                  <tbody className="divide-y divide-slate-700">
+                  {invoices.map((invoice, idx) => (
+                      <tr
+                          key={idx}
+                          className="hover:bg-slate-750 transition-colors"
+                      >
+                        <td className="px-6 py-4 text-sm font-medium text-white">
+                          <div>
+                            <p>{invoice.vendorName}</p>
+                            <p className="text-xs text-slate-400">
+                              {invoice.vendor.slice(0, 8)}...
+                            </p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-300">
+                          ${invoice.amount.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <StatusBadge status={invoice.status} />
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-400">
+                          {new Date(invoice.dueDate * 1000).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          <button
+                              onClick={() => handleViewInvoice(invoice.ipfsHash)}
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                  ))}
+                  </tbody>
+                </table>
+              </div>
+          )}
+        </div>
       </div>
-    </div>
   );
 }

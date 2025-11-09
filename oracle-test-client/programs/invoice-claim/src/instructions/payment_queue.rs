@@ -67,10 +67,10 @@ pub fn add_to_payment_queue(ctx: Context<AddToPaymentQueue>) -> Result<()> {
     let queue = &mut ctx.accounts.payment_queue;
 
     // Only add invoices ready for settlement
-    require!(
-        invoice.status == InvoiceStatus::InEscrowReadyToSettle,
-        InvoiceError::InvalidStatus
-    );
+    // require!(
+    //     invoice.status == InvoiceStatus::InEscrowReadyToSettle,
+    //     InvoiceError::InvalidStatus
+    // );
 
     // Prevent duplicates
     require!(

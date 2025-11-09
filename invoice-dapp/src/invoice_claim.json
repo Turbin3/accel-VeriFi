@@ -1,5 +1,5 @@
 {
-  "address": "8AHApdLz2DieivEqjbnF2UKtmGQQwFybaPRs1sxRYqjy",
+  "address": "HQ5y6ZMwNHSrRvma4bDHtay4UDW5qBM63A5mvyGi4MkH",
   "metadata": {
     "name": "invoice_claim",
     "version": "0.1.0",
@@ -405,6 +405,58 @@
       "args": []
     },
     {
+      "name": "close_org",
+      "discriminator": [
+        195,
+        139,
+        244,
+        208,
+        62,
+        30,
+        143,
+        152
+      ],
+      "accounts": [
+        {
+          "name": "org_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "org_config.authority",
+                "account": "OrgConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "org_config"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "close_request",
       "discriminator": [
         170,
@@ -726,38 +778,38 @@
             "program": {
               "kind": "const",
               "value": [
-                106,
-                98,
-                81,
-                136,
-                76,
-                237,
+                243,
+                164,
+                247,
+                64,
+                107,
+                209,
+                123,
                 240,
-                180,
-                206,
-                172,
-                214,
-                76,
-                36,
-                120,
-                141,
-                9,
-                207,
-                35,
-                167,
-                182,
-                208,
-                210,
-                196,
-                126,
-                255,
+                161,
+                33,
+                23,
                 218,
-                165,
-                166,
-                106,
-                96,
-                196,
-                180
+                224,
+                104,
+                182,
+                191,
+                43,
+                39,
+                84,
+                86,
+                141,
+                95,
+                140,
+                30,
+                94,
+                143,
+                199,
+                157,
+                62,
+                90,
+                125,
+                134
               ]
             }
           }
@@ -873,7 +925,7 @@
         },
         {
           "name": "owner_program",
-          "address": "8AHApdLz2DieivEqjbnF2UKtmGQQwFybaPRs1sxRYqjy"
+          "address": "HQ5y6ZMwNHSrRvma4bDHtay4UDW5qBM63A5mvyGi4MkH"
         },
         {
           "name": "delegation_program",
@@ -985,10 +1037,7 @@
           "signer": true
         },
         {
-          "name": "authority",
-          "relations": [
-            "invoice_account"
-          ]
+          "name": "authority"
         },
         {
           "name": "payer_ata",
@@ -1770,7 +1819,8 @@
               },
               {
                 "kind": "account",
-                "path": "authority"
+                "path": "invoice_account.authority",
+                "account": "InvoiceAccount"
               },
               {
                 "kind": "account",
@@ -1823,14 +1873,11 @@
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
-          "name": "authority",
+          "name": "signer",
           "docs": [
             "The invoice owner must authorize settlement"
           ],
-          "signer": true,
-          "relations": [
-            "invoice_account"
-          ]
+          "signer": true
         }
       ],
       "args": []

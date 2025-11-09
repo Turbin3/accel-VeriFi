@@ -15,7 +15,6 @@ pub struct FundEscrow<'info> {
         mut,
         seeds = [b"invoice", authority.key().as_ref(), &invoice_account.nonce.to_le_bytes()],
         bump,
-        has_one = authority @ InvoiceError::Unauthorized
     )]
     pub invoice_account: Account<'info, InvoiceAccount>,
 
@@ -80,9 +79,8 @@ pub struct SettleToVendor<'info> {
 
     #[account(
         mut,
-        seeds = [b"invoice", authority.key().as_ref(), &invoice_account.nonce.to_le_bytes()],
+        seeds = [b"invoice", invoice_account.authority.as_ref(), &invoice_account.nonce.to_le_bytes()],
         bump,
-        has_one = authority @ InvoiceError::Unauthorized
     )]
     pub invoice_account: Account<'info, InvoiceAccount>,
 
@@ -105,7 +103,7 @@ pub struct SettleToVendor<'info> {
     pub token_program: Program<'info, Token>,
 
     /// The invoice owner must authorize settlement
-    pub authority: Signer<'info>,
+    pub signer: Signer<'info>,
 }
 
 pub fn settle_to_vendor(ctx: Context<SettleToVendor>) -> Result<()> {
@@ -113,28 +111,44 @@ pub fn settle_to_vendor(ctx: Context<SettleToVendor>) -> Result<()> {
     require!(!cfg.paused, InvoiceError::OrgPaused);
 
     let inv = &mut ctx.accounts.invoice_account;
-    // Settle only when escrowed and cleared to settle
-    require!(inv.status == InvoiceStatus::InEscrowReadyToSettle, InvoiceError::InvalidStatus);
-    // Ensure due date reached
+
+    // ✅ Allow either the invoice owner or the org's oracle signer to settle
+    let s = ctx.accounts.signer.key();
+    require!(
+        s == inv.authority || s == cfg.oracle_signer,
+        InvoiceError::Unauthorized
+    );
+
+
     let now = Clock::get()?.unix_timestamp;
     require!(now >= inv.due_date, InvoiceError::PaymentNotDue);
+
     let amount = inv.amount;
 
-    // Sign with escrow authority PDA derived from invoice key
-    let bump = ctx.bumps.escrow_authority;
+    // ✅ FIX: Store the key to avoid temporary lifetime issue
     let invoice_key = inv.key();
-    let bump_seed = [bump];
-    let signer_seeds: &[&[u8]] = &[b"escrow_auth", invoice_key.as_ref(), &bump_seed];
-    let signer = &[signer_seeds];
 
-    token::transfer(CpiContext::new_with_signer(
-        ctx.accounts.token_program.to_account_info(),
-        anchor_spl::token::Transfer {
-        from: ctx.accounts.escrow_ata.to_account_info(),
-        to: ctx.accounts.vendor_ata.to_account_info(),
-        authority: ctx.accounts.escrow_authority.to_account_info(),
-    },signer,),amount)?;
+    let bump = ctx.bumps.escrow_authority;
+    let signer_seeds: &[&[u8]] = &[
+        b"escrow_auth",
+        invoice_key.as_ref(),
+        &[bump],
+    ];
+
+    anchor_spl::token::transfer(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            anchor_spl::token::Transfer {
+                from: ctx.accounts.escrow_ata.to_account_info(),
+                to: ctx.accounts.vendor_ata.to_account_info(),
+                authority: ctx.accounts.escrow_authority.to_account_info(),
+            },
+            &[signer_seeds],
+        ),
+        amount,
+    )?;
 
     inv.status = InvoiceStatus::Paid;
     Ok(())
 }
+
