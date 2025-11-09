@@ -3,22 +3,21 @@ import { motion } from "framer-motion";
 import {
     Loader,
     CheckCircle,
-    XCircle,
     Eye,
 } from "lucide-react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { Buffer } from "buffer";
-import { Program, AnchorProvider } from "@coral-xyz/anchor";
-import IDL from "../../invoice_claim.json";
+import bs58 from "bs58";
 
 const PROGRAM_ID = new PublicKey(
-    import.meta.env.VITE_PROGRAM_ID || "DVxvMr8TyPWpnT4tQc56SCLXAiNr2VC4w22R6i7B1V9U"
+    import.meta.env.VITE_PROGRAM_ID || "7DCAzfvmrbjDuoQMSdamKwguDTQ48QAuedDHpWPynJvx"
 );
+
 const PINATA_GATEWAY = import.meta.env.VITE_PINATA_GATEWAY || "https://emerald-abundant-baboon-978.mypinata.cloud/ipfs";
 
 interface PendingInvoice {
-    invoiceAccount: string;   // invoice PDA
+    invoiceAccount: string;
     vendor: string;
     vendorName: string;
     amount: number;
@@ -46,41 +45,42 @@ export function PaymentQueue() {
         setError("");
 
         try {
-            const paymentQueueDiscriminator = Buffer.from([/* 8-byte discriminator here */]);
-            /*
-            You need to fill in the exact 8-byte discriminator for PaymentQueue account,
-            use your Anchor IDL or Rust code to get it.
-            */
+            // PaymentQueue discriminator from IDL
+            const paymentQueueDiscriminator = Buffer.from([252, 158, 5, 213, 84, 121, 59, 80]);
 
-            // Fetch all program accounts filtering by discriminator prefix
-            const allAccounts = await connection.getProgramAccounts(PROGRAM_ID);
+            // Fetch all program accounts with base58 filter
+            const allAccounts = await connection.getProgramAccounts(PROGRAM_ID, {
+                filters: [
+                    {
+                        memcmp: {
+                            offset: 0,
+                            bytes: bs58.encode(paymentQueueDiscriminator),
+                        },
+                    },
+                ],
+            });
+
+            console.log(`Found ${allAccounts.length} PaymentQueue account(s)`);
+
             const fetchedInvoices: PendingInvoice[] = [];
 
             for (const { pubkey, account } of allAccounts) {
                 try {
-                    if (account.data.length < 100) continue;
+                    console.log(`Processing PaymentQueue: ${pubkey.toBase58()}`);
 
-                    // Check discriminator
-                    const discriminator = account.data.slice(0, 8);
-                    if (!discriminator.equals(paymentQueueDiscriminator)) continue;
-
-                    // Parse PaymentQueue account data from account.data
-                    // Skip discriminator 8 bytes
-                    let offset = 8;
+                    let offset = 8; // Skip discriminator
 
                     // org: Pubkey (32 bytes)
+                    const org = new PublicKey(account.data.slice(offset, offset + 32));
                     offset += 32;
+                    console.log(`  Org: ${org.toBase58()}`);
 
                     // pending_invoices: Vec<PendingPayment>
-                    // It is a Rust Anchor Vec serialized as:
-                    // - 4-byte length (u32 little endian)
-                    // - repeated entries of PendingPayment
-
                     const len = account.data.readUInt32LE(offset);
                     offset += 4;
+                    console.log(`  Pending invoices count: ${len}`);
 
                     for (let i = 0; i < len; i++) {
-                        // PendingPayment fields:
                         // invoice_account: Pubkey (32 bytes)
                         const invoiceAccount = new PublicKey(account.data.slice(offset, offset + 32));
                         offset += 32;
@@ -97,13 +97,13 @@ export function PaymentQueue() {
                         const amount = Number(account.data.readBigUInt64LE(offset));
                         offset += 8;
 
-                        // For vendor_name, you may want to fetch vendor account separately or cache vendor info.
-                        // For simplicity, show vendor public key as vendorName
+                        console.log(`  Invoice ${i}: ${invoiceAccount.toBase58()}, Amount: ${amount}, Due: ${dueDate}`);
+
                         fetchedInvoices.push({
                             invoiceAccount: invoiceAccount.toBase58(),
                             vendor: vendor.toBase58(),
-                            vendorName: vendor.toBase58(),
-                            amount: amount / 1_000_000, // assuming 6 decimals e.g. USDC
+                            vendorName: vendor.toBase58().slice(0, 8) + "...",
+                            amount: amount / 1_000_000, // Assuming 6 decimals (USDC)
                             dueDate,
                         });
                     }
@@ -112,6 +112,7 @@ export function PaymentQueue() {
                 }
             }
 
+            console.log(`Total invoices fetched: ${fetchedInvoices.length}`);
             setInvoices(fetchedInvoices);
         } catch (err: any) {
             console.error("Error fetching payment queue:", err);
@@ -121,9 +122,57 @@ export function PaymentQueue() {
         }
     };
 
-    const handleViewInvoice = (invoiceAccount: string) => {
-        // In your flow, you might want to fetch invoice account's IPFS hash separately
-        alert(`Implement viewing invoice details for: ${invoiceAccount}`);
+    const handleViewInvoice = async (invoiceAccountAddress: string) => {
+        try {
+            const invoicePubkey = new PublicKey(invoiceAccountAddress);
+
+            // Fetch the invoice account to get IPFS hash
+            const accountInfo = await connection.getAccountInfo(invoicePubkey);
+
+            if (!accountInfo) {
+                alert("Invoice account not found");
+                return;
+            }
+
+            const invoiceDiscriminator = Buffer.from([105, 207, 226, 227, 85, 35, 132, 40]);
+            const discriminator = accountInfo.data.slice(0, 8);
+
+            if (!discriminator.equals(invoiceDiscriminator)) {
+                alert("Invalid invoice account");
+                return;
+            }
+
+            let offset = 8;
+
+            // authority: Pubkey (32 bytes)
+            offset += 32;
+
+            // vendor: Pubkey (32 bytes)
+            offset += 32;
+
+            // vendor_name: String (4 bytes length + string data)
+            const vendorNameLen = accountInfo.data.readUInt32LE(offset);
+            offset += 4 + vendorNameLen;
+
+            // amount: u64 (8 bytes)
+            offset += 8;
+
+            // due_date: i64 (8 bytes)
+            offset += 8;
+
+            // ipfs_hash: String (4 bytes length + string data)
+            const ipfsHashLen = accountInfo.data.readUInt32LE(offset);
+            offset += 4;
+
+            const ipfsHash = accountInfo.data.slice(offset, offset + ipfsHashLen).toString();
+
+            // Open the invoice in a new tab
+            const fileUrl = `${PINATA_GATEWAY}/${ipfsHash}`;
+            window.open(fileUrl, "_blank", "noopener,noreferrer");
+        } catch (error) {
+            console.error("Error opening invoice:", error);
+            alert("Failed to open invoice");
+        }
     };
 
     const fadeIn = {
@@ -196,10 +245,10 @@ export function PaymentQueue() {
                                             <td className="px-6 py-4">
                                                 <p className="text-xs font-mono text-slate-400 truncate max-w-xs">{invoice.invoiceAccount.slice(0, 16)}...</p>
                                             </td>
-                                            <td className="px-6 py-4">
+                                            <td className="px-6 py-4 text-center">
                                                 <button
                                                     onClick={() => handleViewInvoice(invoice.invoiceAccount)}
-                                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors"
+                                                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors"
                                                 >
                                                     <Eye size={14} /> View
                                                 </button>

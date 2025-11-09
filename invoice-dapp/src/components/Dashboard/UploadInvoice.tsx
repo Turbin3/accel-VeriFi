@@ -22,7 +22,6 @@ const PROGRAM_ID = new PublicKey(import.meta.env.VITE_PROGRAM_ID);
 const PINATA_JWT = import.meta.env.VITE_PINATA_JWT || "";
 const PINATA_GATEWAY = "https://emerald-abundant-baboon-978.mypinata.cloud/ipfs";
 
-
 interface Organization {
   pubkey: string;
   name: string;
@@ -124,12 +123,13 @@ export function UploadInvoice() {
             if (!alreadyExists) {
               foundOrgs.push({
                 pubkey: orgPubkey.toBase58(),
-                name: `${vendor_name} - ${orgPubkey.toBase58().slice(0, 8)}...`,
+                name: `${vendor_name} - ${orgPubkey
+                    .toBase58()
+                    .slice(0, 8)}...`,
               });
             }
           }
-        } catch (err) {
-        }
+        } catch (err) {}
       }
 
       console.log("✅ Found organizations:", foundOrgs);
@@ -169,21 +169,40 @@ export function UploadInvoice() {
       const nonceBN = new BN(Date.now());
       const nonceLe = Buffer.from(nonceBN.toArray("le", 8));
 
-      // DEBUG: Log the nonce bytes
-      console.log("🔍 Nonce Debug:");
-      console.log("  Nonce value:", nonceBN.toString());
-      console.log("  Nonce bytes (hex):", nonceLe.toString("hex"));
-      console.log("  Nonce bytes (array):", Array.from(nonceLe));
+      // --- Extended PDA seed logs ---
+      console.group("🔍 PDA Seed Debug");
+      console.log("Program ID:", PROGRAM_ID.toBase58());
 
-      const [invoiceRequestPda] = PublicKey.findProgramAddressSync(
-          [Buffer.from("request"), authority.toBuffer(), nonceLe],
+      const seed1 = Buffer.from("request");
+      console.log("Seed[0] (string):", seed1.toString());
+      console.log("Seed[0] (hex):", seed1.toString("hex"));
+
+      console.log("Seed[1] (authority):", authority.toBase58());
+      console.log("Seed[1] (authority bytes, hex):", authority
+          .toBuffer()
+          .toString("hex"));
+
+      console.log("Seed[2] (nonce value):", nonceBN.toString());
+      console.log("Seed[2] (nonce bytes, hex):", nonceLe.toString("hex"));
+      console.log("Seed[2] (nonce bytes, array):", Array.from(nonceLe));
+
+      const [invoiceRequestPda, bump] = PublicKey.findProgramAddressSync(
+          [seed1, authority.toBuffer(), nonceLe],
           PROGRAM_ID
       );
+
+      console.log("Derived PDA:", invoiceRequestPda.toBase58());
+      console.log("Bump:", bump);
+      console.groupEnd();
+      // -------------------------------
 
       console.log("📋 Submitting invoice extraction request...");
       console.log("Program ID:", program.programId.toBase58());
       console.log("Authority:", authority.toBase58());
-      console.log("Authority bytes (hex):", authority.toBuffer().toString("hex"));
+      console.log(
+          "Authority bytes (hex):",
+          authority.toBuffer().toString("hex")
+      );
       console.log("Request PDA (calculated):", invoiceRequestPda.toBase58());
 
       const tx = await program.methods
@@ -207,7 +226,6 @@ export function UploadInvoice() {
     }
   };
 
-
   const fetchInvoiceRequests = async () => {
     if (!wallet.publicKey) return;
 
@@ -226,32 +244,36 @@ export function UploadInvoice() {
       const allRequests = await program.account.invoiceRequest.all();
 
       const foundRequests: InvoiceRequest[] = allRequests
-          .filter((req: { account: { authority: { equals: (arg0: PublicKey) => any; }; }; }) => req.account.authority.equals(authority))
-          .map((req: { account: any; publicKey: any; }) => {
+          .filter(
+              (req: {
+                account: { authority: { equals: (arg0: PublicKey) => any } };
+              }) => req.account.authority.equals(authority)
+          )
+          .map((req: { account: any; publicKey: any }) => {
             const account = req.account as any;
 
             return {
               pubkey: req.publicKey,
-              ipfs_hash: account.ipfsHash || "",  // ← Changed from ipfs_hash to ipfsHash
+              ipfs_hash: account.ipfsHash || "",
               amount: account.amount?.toNumber?.() || 0,
               status: Object.keys(account.status || {})[0] || "Unknown",
               timestamp: account.timestamp?.toNumber?.() || 0,
               nonce: account.nonce?.toNumber?.() || 0,
             };
           })
-          .sort((a: { timestamp: number; }, b: { timestamp: number; }) => b.timestamp - a.timestamp);
+          .sort(
+              (a: { timestamp: number }, b: { timestamp: number }) =>
+                  b.timestamp - a.timestamp
+          );
 
       console.log("📋 Found invoice requests:", foundRequests);
       setInvoiceRequests(foundRequests);
-
-
     } catch (err: any) {
       console.error("❌ Error fetching invoice requests:", err);
     } finally {
       setLoadingRequests(false);
     }
   };
-
 
   const handleInputChange = (
       e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -394,7 +416,10 @@ export function UploadInvoice() {
       await createInvoiceRequestOnChain(ipfsHash, amountInLowestUnit);
 
       setSuccess(
-          `Invoice uploaded successfully! IPFS Hash: ${ipfsHash.slice(0, 12)}...`
+          `Invoice uploaded successfully! IPFS Hash: ${ipfsHash.slice(
+              0,
+              12
+          )}...`
       );
       console.log("✅ Complete invoice upload process finished");
 
@@ -431,8 +456,7 @@ export function UploadInvoice() {
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0 },
     transition: { duration: 0.6 },
-  };
-
+  };``
   return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6">
         <motion.div

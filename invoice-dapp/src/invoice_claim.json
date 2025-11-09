@@ -1,5 +1,5 @@
 {
-  "address": "7DCAzfvmrbjDuoQMSdamKwguDTQ48QAuedDHpWPynJvx",
+  "address": "HQ5y6ZMwNHSrRvma4bDHtay4UDW5qBM63A5mvyGi4MkH",
   "metadata": {
     "name": "invoice_claim",
     "version": "0.1.0",
@@ -778,38 +778,38 @@
             "program": {
               "kind": "const",
               "value": [
-                92,
-                69,
-                185,
-                77,
-                232,
-                124,
-                202,
-                32,
-                162,
-                167,
-                249,
-                106,
+                243,
+                164,
+                247,
                 64,
-                44,
-                211,
-                119,
-                21,
-                89,
-                140,
-                178,
-                211,
-                9,
-                162,
-                147,
-                254,
-                67,
-                47,
+                107,
+                209,
+                123,
+                240,
+                161,
+                33,
+                23,
+                218,
+                224,
                 104,
-                187,
-                76,
-                190,
-                165
+                182,
+                191,
+                43,
+                39,
+                84,
+                86,
+                141,
+                95,
+                140,
+                30,
+                94,
+                143,
+                199,
+                157,
+                62,
+                90,
+                125,
+                134
               ]
             }
           }
@@ -925,7 +925,7 @@
         },
         {
           "name": "owner_program",
-          "address": "7DCAzfvmrbjDuoQMSdamKwguDTQ48QAuedDHpWPynJvx"
+          "address": "HQ5y6ZMwNHSrRvma4bDHtay4UDW5qBM63A5mvyGi4MkH"
         },
         {
           "name": "delegation_program",
@@ -1819,7 +1819,8 @@
               },
               {
                 "kind": "account",
-                "path": "authority"
+                "path": "invoice_account.authority",
+                "account": "InvoiceAccount"
               },
               {
                 "kind": "account",
@@ -1872,14 +1873,11 @@
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
-          "name": "authority",
+          "name": "signer",
           "docs": [
             "The invoice owner must authorize settlement"
           ],
-          "signer": true,
-          "relations": [
-            "invoice_account"
-          ]
+          "signer": true
         }
       ],
       "args": []

@@ -1,5 +1,6 @@
 mod escrow;
 mod payment_queue;
+mod cranker;
 
 use std::env;
 use solana_sdk::pubkey::Pubkey;
@@ -14,6 +15,7 @@ use std::time::Duration;
 use dotenvy::dotenv;
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
+use crate::cranker::run_cranker;
 use crate::escrow::fund_escrow_for_invoice;
 use crate::payment_queue::add_to_payment_queue;
 
@@ -115,7 +117,7 @@ pub enum RequestStatus {
     Completed,
 }
 
-const PROGRAM_ID: &str = "7DCAzfvmrbjDuoQMSdamKwguDTQ48QAuedDHpWPynJvx";
+const PROGRAM_ID: &str = "HQ5y6ZMwNHSrRvma4bDHtay4UDW5qBM63A5mvyGi4MkH";
 const RPC_URL: &str = "https://api.devnet.solana.com";
 
 #[tokio::main]
@@ -149,8 +151,13 @@ async fn main() {
                 }
             }
             Err(e) => {
-                eprintln!("❌ Error: {}", e);
+                eprintln!("❌ Error in processing requests: {}", e);
             }
+        }
+
+        match run_cranker(&rpc_client, &keypair, &program_id) {
+            Ok(_) => println!("✅ Cranker run completed successfully"),
+            Err(e) => eprintln!("❌ Error in cranker run: {}", e),
         }
 
         tokio::time::sleep(Duration::from_secs(5)).await;
@@ -164,12 +171,10 @@ async fn process_pending_requests(
 ) -> Result<usize, Box<dyn std::error::Error>> {
     println!("Fetching program accounts...");
     let accounts = rpc_client.get_program_accounts(program_id)?;
-
     println!("Found {} total accounts for this program", accounts.len());
 
     let mut processed = 0;
 
-    // Precompute Anchor account discriminator for InvoiceRequest
     let mut h = Sha256::new();
     h.update(b"account:InvoiceRequest");
     let invoice_request_disc: [u8; 8] = h.finalize()[..8].try_into().unwrap();
@@ -186,7 +191,6 @@ async fn process_pending_requests(
         let disc = &account.data[..8];
         println!("   Discriminator: {:02x?}", disc);
 
-        // Only consider InvoiceRequest accounts
         if disc != &invoice_request_disc {
             println!("   ℹ️ Not an InvoiceRequest account, skipping");
             continue;
@@ -194,37 +198,32 @@ async fn process_pending_requests(
 
         match InvoiceRequest::from_account_data(&account.data) {
             Ok(request) => {
-                println!("   ✅ Successfully deserialized InvoiceRequest");
-                println!("      Authority: {}", request.authority);
-                println!("      IPFS: {}", request.ipfs_hash);
-                println!("      Status: {:?}", request.status);
-                println!("      Nonce: {}", request.nonce);
+                println!("Successfully deserialized InvoiceRequest");
+                println!("Authority: {}", request.authority);
+                println!("IPFS: {}", request.ipfs_hash);
+                println!("Status: {:?}", request.status);
+                println!("Nonce: {}", request.nonce);
 
                 let decimals: u8 = env::var("MINT_DECIMALS")
                     .ok()
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(6);
-                log_amount("      Request amount", request.amount, decimals);
+                log_amount("Request amount", request.amount, decimals);
 
                 if matches!(request.status, RequestStatus::Pending) {
-                    println!("\n   🎯 Found PENDING request!");
-
+                    println!("\nFound PENDING request!");
                     match extract_and_submit(rpc_client, keypair, program_id, &request, &pubkey).await {
                         Ok(_) => {
-                            println!("   ✅ Successfully processed!");
+                            println!("Successfully processed!");
                             processed += 1;
                         }
-                        Err(e) => {
-                            eprintln!("   ❌ Failed: {}", e);
-                        }
+                        Err(e) => eprintln!("Failed: {}", e),
                     }
                 } else {
-                    println!("   ℹ️ Already completed, skipping");
+                    println!("Already completed, skipping");
                 }
             }
-            Err(e) => {
-                println!("   ⚠️ Failed to deserialize InvoiceRequest: {}", e);
-            }
+            Err(e) => println!("Failed to deserialize InvoiceRequest: {}", e),
         }
     }
 
@@ -275,28 +274,21 @@ async fn extract_and_submit(
 
         match client.get(&ocr_url).send().await {
             Ok(resp) => {
-                match resp.json::<serde_json::Value>().await {
-                    Ok(v) => {
-                        let errored = v.get("IsErroredOnProcessing")
-                            .and_then(|b| b.as_bool())
-                            .unwrap_or(false);
+                if let Ok(v) = resp.json::<serde_json::Value>().await {
+                    let errored = v.get("IsErroredOnProcessing")
+                        .and_then(|b| b.as_bool())
+                        .unwrap_or(false);
 
-                        if !errored {
-                            json = v;
-                            println!("OCR succeeded via {}", gw);
-                            break;
-                        } else {
-                            last_err = Some(format!("OCR error via {}: {:?}", gw, v.get("ErrorMessage")));
-                        }
-                    }
-                    Err(e) => {
-                        last_err = Some(format!("Failed to parse OCR response via {}: {}", gw, e));
+                    if !errored {
+                        json = v;
+                        println!("OCR succeeded via {}", gw);
+                        break;
+                    } else {
+                        last_err = Some(format!("OCR error via {}: {:?}", gw, v.get("ErrorMessage")));
                     }
                 }
             }
-            Err(e) => {
-                last_err = Some(format!("HTTP error via {}: {}", gw, e));
-            }
+            Err(e) => last_err = Some(format!("HTTP error via {}: {}", gw, e)),
         }
     }
 
@@ -317,7 +309,7 @@ async fn extract_and_submit(
         .ok_or("Failed to extract OCR text")?;
     println!("OCR Text extracted");
 
-    let (vendor, amount, mut due_date) = parse_invoice(ocr_text);
+    let (vendor, amount, _) = parse_invoice(ocr_text);
     println!("Vendor: {}", vendor);
 
     let decimals: u8 = env::var("MINT_DECIMALS")
@@ -330,32 +322,12 @@ async fn extract_and_submit(
         eprintln!("Warning: parsed amount_base_units is 0; check OCR and parsing rules");
     }
 
-    println!("Due Date: {}", due_date);
-
-    // Ensure due date is in the future
+    // 🔥 Force due date to 30 seconds from now (test mode)
     let now = chrono::Utc::now().timestamp();
-    let short_due_seconds = env::var("SHORT_DUE_SECONDS")
-        .ok()
-        .and_then(|s| s.parse::<i64>().ok())
-        .unwrap_or(0);
+    let due_date = now + 30;
+    println!("⏰ Overriding due date to {} (30 seconds from now)", due_date);
 
-    if short_due_seconds > 0 {
-        let override_due = now + short_due_seconds;
-        println!(
-            "SHORT_DUE_SECONDS set ({}s); overriding due date to {}",
-            short_due_seconds, override_due
-        );
-        due_date = override_due;
-    } else if due_date <= now {
-        let fallback = now + 30 * 24 * 60 * 60;
-        println!(
-            "Due date not found or in past; using fallback {} (30 days ahead)",
-            fallback
-        );
-        due_date = fallback;
-    }
-
-    // Derive PDAs with nonce
+    // Derive PDAs
     let (invoice_pda, _) = Pubkey::find_program_address(
         &[
             b"invoice",
@@ -379,7 +351,7 @@ async fn extract_and_submit(
         program_id,
     );
 
-    // Compute instruction discriminator
+    // Build instruction data
     let mut hasher = Sha256::new();
     hasher.update(b"global:process_extraction_result");
     let disc: [u8; 8] = hasher.finalize()[..8].try_into().unwrap();
@@ -419,83 +391,48 @@ async fn extract_and_submit(
         }
         Err(e) => {
             eprintln!("Transaction failed: {}", e);
-
             if let Ok(sim) = rpc_client.simulate_transaction(&tx) {
-                eprintln!("\n===== TRANSACTION LOGS =====");
                 if let Some(logs) = sim.value.logs {
                     for log in logs {
                         eprintln!("{}", log);
                     }
                 }
-                eprintln!("============================\n");
             }
-
             return Err(e.into());
         }
     };
 
-    // Post-submit verification
     if let Ok(acc) = rpc_client.get_account(&invoice_pda) {
         if let Ok(inv) = InvoiceAccountLite::from_account_data(&acc.data) {
             log_amount("On-chain invoice.amount", inv.amount, decimals);
-        } else {
-            eprintln!("Could not decode on-chain InvoiceAccount for verification");
         }
-    } else {
-        eprintln!("Could not fetch on-chain InvoiceAccount for verification");
     }
 
-    // Auto-request VRF if enabled
+    // Auto actions
     if env::var("AUTO_REQUEST_VRF").unwrap_or_default() == "1" {
-        if let Err(e) = request_vrf_for_invoice(rpc_client, keypair, program_id, &invoice_pda).await {
-            eprintln!("VRF request failed: {}", e);
-        }
+        let _ = request_vrf_for_invoice(rpc_client, keypair, program_id, &invoice_pda).await;
     }
 
-    // Auto-fund escrow if enabled
     if env::var("AUTO_FUND_ESCROW").unwrap_or_default() == "1" {
         println!("\nAuto-funding escrow...");
-        match fund_escrow_for_invoice(
-            rpc_client,
-            keypair,
-            program_id,
-            &invoice_pda,
-            &request.authority,
-            request.nonce
+        if let Ok(_) = fund_escrow_for_invoice(
+            rpc_client, keypair, program_id, &invoice_pda, &request.authority, request.nonce
         ).await {
-            Ok(_) => {
-                println!("Escrow funded successfully!");
-
-                println!("\nAdding to payment queue...");
-                if let Err(e) = add_to_payment_queue(
-                    rpc_client,
-                    keypair,
-                    program_id,
-                    &invoice_pda,
-                    &request.authority,
-                    request.nonce
-                ).await {
-                    eprintln!("Failed to add to payment queue: {}", e);
-                }
-            }
-            Err(e) => {
-                eprintln!("Escrow funding failed: {}", e);
-            }
+            println!("Escrow funded successfully!");
+            let _ = add_to_payment_queue(
+                rpc_client, keypair, program_id, &invoice_pda, &request.authority, request.nonce
+            ).await;
         }
     }
 
     Ok(())
 }
 
-
 fn parse_invoice(text: &str) -> (String, u64, i64) {
     println!("\n===== PARSING INVOICE DATA =====");
-
-    // Extract vendor name
     let vendor = if let Some(bill_to_pos) = text.find("Bill to") {
         let after_bill_to = &text[bill_to_pos + 7..];
         let lines: Vec<&str> = after_bill_to.lines().collect();
-
         lines.iter()
             .skip(1)
             .find(|line| !line.trim().is_empty() && !line.contains("@"))
@@ -508,9 +445,6 @@ fn parse_invoice(text: &str) -> (String, u64, i64) {
             .unwrap_or_else(|| "Unknown Vendor".to_string())
     };
 
-    println!("  Vendor Name: '{}'", vendor);
-
-    // Extract amount
     let amount_re = Regex::new(r"\$([0-9]+\.[0-9]{2})\s+due").unwrap();
     let amount_str = amount_re
         .captures(text)
@@ -520,75 +454,17 @@ fn parse_invoice(text: &str) -> (String, u64, i64) {
     let amount_float: f64 = amount_str.parse().unwrap_or(0.0);
     let amount = (amount_float * 1_000_000.0) as u64;
 
-    println!("  Amount (OCR string): {}", amount_str);
-
-    // Extract due date
-    let date_re = Regex::new(r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(\d{4})").unwrap();
-    let due_date = if let Some(caps) = date_re.captures(text) {
-        let month = match &caps[1] {
-            "January" => 1, "February" => 2, "March" => 3, "April" => 4,
-            "May" => 5, "June" => 6, "July" => 7, "August" => 8,
-            "September" => 9, "October" => 10, "November" => 11, "December" => 12,
-            _ => 1,
-        };
-        let day: u32 = caps[2].parse().unwrap_or(1);
-        let year: i32 = caps[3].parse().unwrap_or(2025);
-
-        chrono::NaiveDate::from_ymd_opt(year, month, day)
-            .and_then(|d| d.and_hms_opt(0, 0, 0))
-            .map(|dt| dt.and_utc().timestamp())
-            .unwrap_or(0)
-    } else {
-        0
-    };
-
-    if due_date > 0 {
-        let date_str = chrono::NaiveDateTime::from_timestamp_opt(due_date, 0)
-            .map(|dt| dt.format("%B %d, %Y").to_string())
-            .unwrap_or_else(|| "Invalid".to_string());
-        println!("  Due Date: {} (Unix: {})", date_str, due_date);
-    } else {
-        println!("  Due Date: Not found");
-    }
-
+    println!("  Vendor: '{}', Amount: {}", vendor, amount);
     println!("================================\n");
-
-    (vendor, amount, due_date)
+    (vendor, amount, 0)
 }
 
 fn log_amount(label: &str, amount_base_units: u64, decimals: u8) {
-    let base_units_str = amount_base_units.to_string();
-
-    let le_hex = {
-        let mut s = String::with_capacity(16);
-        for b in amount_base_units.to_le_bytes() {
-            let _ = write!(&mut s, "{:02x}", b);
-        }
-        s
-    };
-
-    let be_hex = {
-        let mut s = String::with_capacity(16);
-        for b in amount_base_units.to_be_bytes() {
-            let _ = write!(&mut s, "{:02x}", b);
-        }
-        s
-    };
-
     let denom = 10_u128.pow(decimals as u32);
     let base = amount_base_units as u128;
     let ui_int = base / denom;
     let ui_frac = base % denom;
-    let human_exact = format!(
-        "{}.{}",
-        ui_int,
-        format!("{:0width$}", ui_frac, width = decimals as usize)
-    );
-
-    println!(
-        "{} => base_units: {}, le_hex: 0x{}, be_hex: 0x{}, decimals: {}, human: {}",
-        label, base_units_str, le_hex, be_hex, decimals, human_exact
-    );
+    println!("{} => {}.{}", label, ui_int, ui_frac);
 }
 
 #[derive(Clone, Debug)]
@@ -598,43 +474,10 @@ struct InvoiceAccountLite {
 
 impl InvoiceAccountLite {
     pub fn from_account_data(data: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
-        let mut offset = 8;
-
-        // authority (32)
-        if offset + 32 > data.len() {
-            return Err("InvoiceAccount: short read (authority)".into());
-        }
-        offset += 32;
-
-        // vendor (32)
-        if offset + 32 > data.len() {
-            return Err("InvoiceAccount: short read (vendor)".into());
-        }
-        offset += 32;
-
-        // vendor_name length + bytes
-        if offset + 4 > data.len() {
-            return Err("InvoiceAccount: short read (vendor_name len)".into());
-        }
-        let name_len = u32::from_le_bytes([
-            data[offset], data[offset+1], data[offset+2], data[offset+3]
-        ]) as usize;
-        offset += 4;
-
-        if offset + name_len > data.len() {
-            return Err("InvoiceAccount: short read (vendor_name)".into());
-        }
-        offset += name_len;
-
-        // amount (u64)
-        if offset + 8 > data.len() {
-            return Err("InvoiceAccount: short read (amount)".into());
-        }
-        let amount = u64::from_le_bytes([
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
-            data[offset+4], data[offset+5], data[offset+6], data[offset+7]
-        ]);
-
+        let mut offset = 8 + 32 + 32;
+        let name_len = u32::from_le_bytes(data[offset..offset + 4].try_into()?) as usize;
+        offset += 4 + name_len;
+        let amount = u64::from_le_bytes(data[offset..offset + 8].try_into()?);
         Ok(InvoiceAccountLite { amount })
     }
 }
@@ -649,24 +492,20 @@ async fn request_vrf_for_invoice(
         .expect("ORG_AUTHORITY_PUBKEY must be set in .env");
     let org_authority = Pubkey::from_str(&org_authority_str)?;
 
-    let (org_config_pda, _) = Pubkey::find_program_address(
-        &[b"org_config", org_authority.as_ref()],
-        program_id,
-    );
+    let (org_config_pda, _) =
+        Pubkey::find_program_address(&[b"org_config", org_authority.as_ref()], program_id);
 
-    let queue_str = env::var("QUEUE_PUBKEY")
-        .expect("QUEUE_PUBKEY must be set in .env to auto-request VRF");
+    let queue_str =
+        env::var("QUEUE_PUBKEY").expect("QUEUE_PUBKEY must be set in .env to auto-request VRF");
     let queue_pk = Pubkey::from_str(&queue_str)?;
 
     let mut h = Sha256::new();
     h.update(b"global:request_invoice_audit_vrf");
     let disc: [u8; 8] = h.finalize()[..8].try_into().unwrap();
 
-    let client_seed: u8 = 42;
-
-    let mut data = Vec::with_capacity(9);
+    let mut data = Vec::new();
     data.extend_from_slice(&disc);
-    data.push(client_seed);
+    data.push(42);
 
     let ix = Instruction {
         program_id: *program_id,
