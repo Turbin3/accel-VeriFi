@@ -408,21 +408,37 @@ async fn extract_and_submit(
         }
     }
 
-    // Auto actions
-    if env::var("AUTO_REQUEST_VRF").unwrap_or_default() == "1" {
-        let _ = request_vrf_for_invoice(rpc_client, keypair, program_id, &invoice_pda).await;
-    }
+    let auto_fund = env::var("AUTO_FUND_ESCROW").unwrap_or_default() == "1";
+    let auto_request_vrf = env::var("AUTO_REQUEST_VRF").unwrap_or_default() == "1";
 
-    if env::var("AUTO_FUND_ESCROW").unwrap_or_default() == "1" {
-        println!("\nAuto-funding escrow...");
-        if let Ok(_) = fund_escrow_for_invoice(
+    if auto_fund {
+        println!("\nAuto-funding escrow (server)...");
+        match fund_escrow_for_invoice(
             rpc_client, keypair, program_id, &invoice_pda, &request.authority, request.nonce
         ).await {
-            println!("Escrow funded successfully!");
-            let _ = add_to_payment_queue(
-                rpc_client, keypair, program_id, &invoice_pda, &request.authority, request.nonce
-            ).await;
+            Ok(_) => {
+                println!("Escrow funded successfully by server.");
+            }
+            Err(e) => {
+                eprintln!("Escrow funding (auto) failed: {}", e);
+
+                if auto_request_vrf {
+                    eprintln!("Skipping VRF request because funding failed.");
+                }
+            }
         }
+    } else {
+        println!("\nAUTO_FUND_ESCROW not enabled; skipping server-side escrow funding.");
+    }
+
+    if auto_request_vrf {
+
+        println!("\nAuto-requesting VRF for routing decision (server)...");
+
+        let _ = request_vrf_for_invoice(rpc_client, keypair, program_id, &invoice_pda).await;
+        println!("VRF request submitted; routing & queueing should be handled by on-chain VRF callback.");
+    } else {
+        println!("AUTO_REQUEST_VRF not enabled; skipping VRF request.");
     }
 
     Ok(())
