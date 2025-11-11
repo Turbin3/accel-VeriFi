@@ -295,7 +295,7 @@ async fn extract_and_submit(
     if json.as_object().map(|m| m.is_empty()).unwrap_or(true) {
         return Err(format!(
             "OCR failed across gateways (tried: {}): {}",
-            tried.join(", "),
+            tried.join(","),
             last_err.unwrap_or_else(|| "unknown error".to_string())
         ).into());
     }
@@ -408,37 +408,117 @@ async fn extract_and_submit(
         }
     }
 
-    let auto_fund = env::var("AUTO_FUND_ESCROW").unwrap_or_default() == "1";
-    let auto_request_vrf = env::var("AUTO_REQUEST_VRF").unwrap_or_default() == "1";
+    
+    // Gated VRF logic:
+    // - Only request VRF if AUTO_REQUEST_VRF=1 AND we determine it's OK to request VRF.
+    // - "ok to request VRF" is true when:
+    //     a) AUTO_FUND_ESCROW=1 and funding succeeded, OR
+    //     b) AUTO_FUND_ESCROW=0 but the on-chain invoice status is IN_ESCROW_AWAITING_VRF (configurable via env)
+    //
+    // This implements the requested gating: don't call VRF when escrow wasn't funded unless the invoice
+    // is already in the awaiting-VRF state on-chain.
+  
 
-    if auto_fund {
-        println!("\nAuto-funding escrow (server)...");
+    // Helper: read invoice status from on-chain invoice account data
+    fn read_invoice_status_from_account_data(data: &[u8]) -> Result<u8, Box<dyn std::error::Error>> {
+        // Parse same layout as cranker/main expects:
+        // 8 disc | 32 authority | 32 vendor_pubkey | 4 vendor_name_len | vendor_name | 8 amount | 8 due_date | 4 ipfs_len | ipfs | 1 status | 8 timestamp | 8 nonce
+        if data.len() < 8 + 32 + 32 + 4 {
+            return Err("invoice account too small".into());
+        }
+        let mut o = 8 + 32 + 32;
+        
+        let name_len = u32::from_le_bytes(data[o..o+4].try_into()?) as usize;
+        o += 4;
+        if o + name_len + 8 + 8 + 4 > data.len() {
+            return Err("short invoice account while parsing vendor/name/amount/due".into());
+        }
+        o += name_len;
+        
+        o += 8;
+        o += 8;
+        
+        let ipfs_len = u32::from_le_bytes(data[o..o+4].try_into()?) as usize;
+        o += 4;
+        if o + ipfs_len + 1 > data.len() {
+            return Err("short invoice account while parsing ipfs/status".into());
+        }
+        o += ipfs_len;
+        
+        if o >= data.len() {
+            return Err("no status byte".into());
+        }
+        Ok(data[o])
+    }
+
+    // Determine if funding succeeded (and thus OK to request VRF)
+    let mut ok_to_request_vrf = false;
+
+    // First, attempt funding if configured
+    if env::var("AUTO_FUND_ESCROW").unwrap_or_default() == "1" {
+        println!("\nAuto-funding escrow...");
         match fund_escrow_for_invoice(
             rpc_client, keypair, program_id, &invoice_pda, &request.authority, request.nonce
         ).await {
             Ok(_) => {
-                println!("Escrow funded successfully by server.");
+                println!("Escrow funded successfully!");
+                ok_to_request_vrf = true;
+
+                // keep existing behavior: add to payment queue after funding (if desired)
+                let _ = add_to_payment_queue(
+                    rpc_client, keypair, program_id, &invoice_pda, &request.authority, request.nonce
+                ).await;
             }
             Err(e) => {
-                eprintln!("Escrow funding (auto) failed: {}", e);
-
-                if auto_request_vrf {
-                    eprintln!("Skipping VRF request because funding failed.");
-                }
+                eprintln!("Auto-funding escrow encountered an error: {}", e);
+                ok_to_request_vrf = false;
             }
         }
     } else {
-        println!("\nAUTO_FUND_ESCROW not enabled; skipping server-side escrow funding.");
+        // AUTO_FUND_ESCROW == 0: check on-chain invoice status to see if it's already InEscrowAwaitingVRF
+        // Read expected awaiting-VRF status value from env (configurable). Default to 2.
+        let expected_status: u8 = env::var("INVOICE_STATUS_AWAITING_VRF")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(2u8);
+
+        println!("\nAUTO_FUND_ESCROW is disabled; checking on-chain invoice status for awaiting-VRF (expected={})", expected_status);
+        match rpc_client.get_account(&invoice_pda) {
+            Ok(acc) => {
+                match read_invoice_status_from_account_data(&acc.data) {
+                    Ok(status_byte) => {
+                        println!("On-chain invoice status byte: {}", status_byte);
+                        if status_byte == expected_status {
+                            println!("Invoice is in awaiting-VRF state; allowing VRF request.");
+                            ok_to_request_vrf = true;
+                        } else {
+                            println!("Invoice is NOT in awaiting-VRF state; will NOT request VRF now.");
+                            ok_to_request_vrf = false;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to parse on-chain invoice status: {}", e);
+                        ok_to_request_vrf = false;
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to fetch on-chain invoice account to check status: {}", e);
+                ok_to_request_vrf = false;
+            }
+        }
     }
 
-    if auto_request_vrf {
-
-        println!("\nAuto-requesting VRF for routing decision (server)...");
-
-        let _ = request_vrf_for_invoice(rpc_client, keypair, program_id, &invoice_pda).await;
-        println!("VRF request submitted; routing & queueing should be handled by on-chain VRF callback.");
+    // Finally: only invoke VRF if AUTO_REQUEST_VRF=1 AND ok_to_request_vrf is true
+    if env::var("AUTO_REQUEST_VRF").unwrap_or_default() == "1" {
+        if ok_to_request_vrf {
+            println!("\nAuto-requesting VRF for routing decision (gated: funding/status ok)...");
+            let _ = request_vrf_for_invoice(rpc_client, keypair, program_id, &invoice_pda).await;
+        } else {
+            println!("\nSkipping VRF request because funding/status gating failed (ok_to_request_vrf=false).");
+        }
     } else {
-        println!("AUTO_REQUEST_VRF not enabled; skipping VRF request.");
+        println!("\nAUTO_REQUEST_VRF not enabled; skipping VRF request.");
     }
 
     Ok(())
